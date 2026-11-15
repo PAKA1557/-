@@ -7,6 +7,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: process.env.BASE_PATH || './',
   plugins: [react()],
+  // KaTeX is most of the bundle; one ~550 kB chunk is fine for this app.
+  build: { chunkSizeWarningLimit: 800 },
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',

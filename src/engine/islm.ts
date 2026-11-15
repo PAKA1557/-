@@ -184,7 +184,7 @@ function solve(input: ScenarioInput, options: SolveOptions = {}): Solution {
   const curves: Curve[] = [
     { id: 'IS', label: 'IS', points: xs.map((Y) => ({ x: Y, y: isRate(p, Y) })) },
     regime === 'rate'
-      ? { id: 'LM', label: `LM (i = ${fmt(p.i, 2)}%)`, points: xs.map((Y) => ({ x: Y, y: p.i })) }
+      ? { id: 'LM', label: 'LM', points: xs.map((Y) => ({ x: Y, y: p.i })) }
       : { id: 'LM', label: 'LM', points: xs.map((Y) => ({ x: Y, y: lmRate(p, Y) })) },
   ]
 
