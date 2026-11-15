@@ -305,6 +305,13 @@ try {
         if (document.documentElement.scrollWidth > innerWidth) issues.push('horizontal page scroll')
         const chart = document.querySelector('.chart')
         const matrix = chart.getScreenCTM()
+        if ([...chart.querySelectorAll('.axis-title')].some((el) => el.hasAttribute('transform'))) issues.push('rotated axis title')
+        // the sticky control panel must stop at the end of its row, not slide over the explanation
+        window.scrollTo(0, document.documentElement.scrollHeight)
+        const cp = document.querySelector('.controls').getBoundingClientRect()
+        const ex = document.querySelector('.explain').getBoundingClientRect()
+        if (Math.min(cp.right, ex.right) > Math.max(cp.left, ex.left) && Math.min(cp.bottom, ex.bottom) - Math.max(cp.top, ex.top) > 1) issues.push('control panel overlaps explanation')
+        window.scrollTo(0, 0)
         if (Math.abs(matrix.a - matrix.d) > 0.001) issues.push('distorted graph')
         const tabs = [...document.querySelectorAll('.tab')].map((el) => el.getBoundingClientRect())
         if (tabs.some((r) => Math.abs(r.y - tabs[0].y) > 1)) issues.push('tabs wrap')
@@ -318,7 +325,7 @@ try {
         if (ticks.some((a, i) => ticks.slice(i + 1).some((b) => overlaps(a, b)))) issues.push('axis tick labels overlap')
         for (const label of chart.querySelectorAll('.curve-label')) {
           const b = label.getBBox()
-          if (b.x < 74 || b.y < 14 || b.x + b.width > 496 || b.y + b.height > 336) issues.push('curve label outside plot')
+          if (b.x < 74 || b.y < 34 || b.x + b.width > 496 || b.y + b.height > 356) issues.push('curve label outside plot')
         }
         const labels = [...chart.querySelectorAll('.curve-label, .eq-label')].map((el) => el.getBBox())
         if (labels.some((a, i) => labels.slice(i + 1).some((b) => overlaps(a, b)))) issues.push('curve/point labels overlap')

@@ -21,8 +21,8 @@ interface Props {
 }
 
 const W = 560
-const H = 380
-const M = { l: 74, r: 64, t: 14, b: 44 }
+const H = 400
+const M = { l: 74, r: 64, t: 34, b: 44 }
 
 const TONE_CLASS = { primary: 'curve-is', secondary: 'curve-lm', reference: 'curve-ref' } as const
 
@@ -236,7 +236,8 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
           <text className="axis-title" x={(M.l + W - M.r) / 2} y={H - 6} textAnchor="middle">
             {axes.x.label}
           </text>
-          <text className="axis-title" transform={`translate(10 ${(M.t + H - M.b) / 2}) rotate(-90)`} textAnchor="middle">
+          {/* horizontal, above the axis: easier to read than a rotated title */}
+          <text className="axis-title" x={8} y={M.t - 14} textAnchor="start">
             {axes.y.label}
             {axes.y.unit ? ` (${axes.y.unit})` : ''}
           </text>
