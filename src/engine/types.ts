@@ -58,6 +58,8 @@ export interface AxisSpec {
   key: string
   label: string
   unit?: string
+  /** Decimal places for value tags and tooltips (default 2). */
+  digits?: number
   /** Default visible range; widened (never narrowed) to fit equilibria. */
   defaultDomain: [number, number]
 }
@@ -67,10 +69,19 @@ export interface Point {
   y: number
 }
 
+/**
+ * How a curve is drawn: 'primary' / 'secondary' are the two model curves
+ * (IS/LM, AD/SRAS), 'reference' a neutral guide such as LRAS.
+ * Defaults to primary for the first curve and secondary otherwise.
+ */
+export type CurveTone = 'primary' | 'secondary' | 'reference'
+
 export interface Curve {
   id: string
   label: string
+  /** Points sorted by ascending x (a vertical curve has equal x values). */
   points: Point[]
+  tone?: CurveTone
 }
 
 /**
@@ -84,7 +95,10 @@ export interface TimePath {
   digits: number
   kind: 'step' | 'dynamic'
   periods: string[]
+  /** May contain NaN for periods the model cannot report (drawn as a gap). */
   values: number[]
+  /** Optional horizontal reference line, e.g. natural output Ȳ. */
+  reference?: { value: number; label: string }
 }
 
 export interface Warning {
@@ -98,12 +112,34 @@ export interface Equilibrium {
   label: string
 }
 
+/** A labelled point on the equilibrium graph (e.g. E₀, short run, long run). */
+export interface Marker {
+  point: Point
+  label: string
+  kind: 'baseline' | 'short' | 'long'
+}
+
+/**
+ * Period-by-period adjustment of a dynamic model on the equilibrium graph.
+ * `points[t]` is the equilibrium in period t = 0…horizon; `curves[t]` the
+ * curves that belong to that period (e.g. SRAS_t), drawn when t is selected.
+ */
+export interface Trajectory {
+  points: Point[]
+  curves: Curve[][]
+  /** Graph ranges are fitted to points[0…fitUntil] (later points may leave the box). */
+  fitUntil: number
+}
+
 export interface Solution {
   /** Every reported number: endogenous outcomes and echoed inputs. */
   values: Values
   curves: Curve[]
   equilibrium: Equilibrium
   timePaths?: TimePath[]
+  /** When present, the graph draws these instead of the default E / E₀ pair. */
+  markers?: Marker[]
+  trajectory?: Trajectory
   warnings: Warning[]
 }
 
@@ -117,6 +153,8 @@ export interface SolveOptions {
   baseline?: Solution
   /** Horizontal range over which to sample curves. */
   xDomain?: [number, number]
+  /** Vertical range, for curves that are easier to sample along y (e.g. AD). */
+  yDomain?: [number, number]
 }
 
 export interface EquationSpec {
@@ -136,6 +174,8 @@ export interface ModelDefinition {
   equations: EquationSpec[]
   /** Short glossary of terms shown with the equations. */
   glossary: { term: string; text: string }[]
+  /** Short note shown at the top of the time-path panel. */
+  timePathNote?: string
   /** Which variables are outcomes (not controllable) in a regime, and why. */
   lockedVariables(regime: string): LockInfo[]
   solve(input: ScenarioInput, options?: SolveOptions): Solution

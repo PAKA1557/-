@@ -75,7 +75,7 @@ export const ISLM_DEFAULTS: ISLMParams = {
 }
 
 /** Autonomous spending excluding the interest-rate term: c0 − c1 T + b0 + G. */
-function autonomous(p: ISLMParams): number {
+export function autonomous(p: ISLMParams): number {
   return p.c0 - p.c1 * p.T + p.b0 + p.G
 }
 
@@ -182,10 +182,10 @@ function solve(input: ScenarioInput, options: SolveOptions = {}): Solution {
   const xs = linspace(x0, x1, 41)
 
   const curves: Curve[] = [
-    { id: 'IS', label: 'IS', points: xs.map((Y) => ({ x: Y, y: isRate(p, Y) })) },
+    { id: 'IS', label: 'IS', tone: 'primary', points: xs.map((Y) => ({ x: Y, y: isRate(p, Y) })) },
     regime === 'rate'
-      ? { id: 'LM', label: 'LM', points: xs.map((Y) => ({ x: Y, y: p.i })) }
-      : { id: 'LM', label: 'LM', points: xs.map((Y) => ({ x: Y, y: lmRate(p, Y) })) },
+      ? { id: 'LM', label: 'LM', tone: 'secondary', points: xs.map((Y) => ({ x: Y, y: p.i })) }
+      : { id: 'LM', label: 'LM', tone: 'secondary', points: xs.map((Y) => ({ x: Y, y: lmRate(p, Y) })) },
   ]
 
   const warnings: Warning[] = []
@@ -371,8 +371,9 @@ export const islmModel: ModelDefinition = {
   ],
   axes: {
     x: { key: 'Y', label: '산출 Y', defaultDomain: DEFAULT_X },
-    y: { key: 'i', label: '금리 i', unit: '%', defaultDomain: [0, 12] },
+    y: { key: 'i', label: '금리 i', unit: '%', digits: 2, defaultDomain: [0, 12] },
   },
+  timePathNote: 'IS-LM은 정태 모형이라 시간에 따른 조정 과정은 없습니다. 기준점에서 현재 균형으로의 수준 변화만 계단으로 보여 줍니다.',
   equations: [
     { label: 'IS (재화시장 균형)', latex: 'Y = c_0 + c_1 (Y - T) + b_0 - b_1 r + G' },
     { label: 'LM (화폐시장 균형)', latex: '\\dfrac{M}{P} = kY - h\\,i' },
