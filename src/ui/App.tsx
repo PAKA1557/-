@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fitDomain } from '../engine'
+import type { Point, Solution } from '../engine/types'
 import { requireModel } from '../state/scenario'
 import { ControlPanel } from './ControlPanel'
 import { EquilibriumGraph } from './EquilibriumGraph'
 import { ExplanationPanel } from './ExplanationPanel'
 import { ModelTabs } from './ModelTabs'
+import { PeriodScrubber } from './PeriodScrubber'
 import { Results } from './Results'
 import { TimePathPanel } from './TimePathPanel'
 import { useScenario } from './useScenario'
@@ -24,21 +26,51 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** Points the graph ranges must show: the equilibrium, labelled markers and the fitted part of the trajectory. */
+function graphPoints(s: Solution): Point[] {
+  const traj = s.trajectory
+  return [
+    s.equilibrium.point,
+    ...(s.markers ?? []).map((m) => m.point),
+    ...(traj ? traj.points.slice(0, traj.fitUntil + 1) : []),
+  ]
+}
+
 export default function App() {
   const [state, dispatch] = useScenario()
   const [toast, setToast] = useState<string | null>(null)
   const model = requireModel(state.model)
 
   const view = useMemo(() => {
-    const cur0 = model.solve(state)
     const base0 = model.solve(state.baseline)
-    const xDomain = fitDomain(model.axes.x.defaultDomain, [cur0.equilibrium.point.x, base0.equilibrium.point.x])
-    const yDomain = fitDomain(model.axes.y.defaultDomain, [cur0.equilibrium.point.y, base0.equilibrium.point.y])
-    const baseline = model.solve(state.baseline, { xDomain })
-    const current = model.solve(state, { xDomain, baseline })
+    const cur0 = model.solve(state, { baseline: base0 })
+    const pts = [...graphPoints(cur0), ...graphPoints(base0)]
+    const xDomain = fitDomain(model.axes.x.defaultDomain, pts.map((p) => p.x))
+    const yDomain = fitDomain(model.axes.y.defaultDomain, pts.map((p) => p.y))
+    const baseline = model.solve(state.baseline, { xDomain, yDomain })
+    const current = model.solve(state, { xDomain, yDomain, baseline })
     const sentences = model.explain({ input: state.baseline, solution: baseline }, { input: state, solution: current })
     return { xDomain, yDomain, baseline, current, sentences }
   }, [model, state])
+
+  // Period scrubber for dynamic models.
+  const maxPeriod = view.current.trajectory ? view.current.trajectory.points.length - 1 : 0
+  const [periodRaw, setPeriod] = useState(1)
+  const [playing, setPlaying] = useState(false)
+  const period = Math.min(periodRaw, maxPeriod)
+  const running = playing && period < maxPeriod
+  useEffect(() => {
+    if (!running) return
+    const id = window.setTimeout(() => {
+      setPeriod(period + 1)
+      if (period + 1 >= maxPeriod) setPlaying(false)
+    }, 250)
+    return () => window.clearTimeout(id)
+  }, [running, period, maxPeriod])
+  const togglePlay = () => {
+    if (!running && period >= maxPeriod) setPeriod(0)
+    setPlaying(!running)
+  }
 
   const ghost = state.baseline.regime !== state.regime || model.variables.some((v) => state.baseline.values[v.key] !== state.values[v.key])
 
@@ -81,6 +113,7 @@ export default function App() {
         />
         <div className="center">
           <EquilibriumGraph
+            title={model.name}
             axes={model.axes}
             xDomain={view.xDomain}
             yDomain={view.yDomain}
@@ -88,10 +121,25 @@ export default function App() {
             baseline={view.baseline}
             showGhost={ghost}
             onSaveBaseline={() => dispatch({ type: 'saveBaseline' })}
+            period={view.current.trajectory ? period : undefined}
+            footer={
+              view.current.trajectory && (
+                <PeriodScrubber
+                  period={period}
+                  max={maxPeriod}
+                  playing={running}
+                  onPeriod={(t) => {
+                    setPlaying(false)
+                    setPeriod(t)
+                  }}
+                  onToggle={togglePlay}
+                />
+              )
+            }
           />
           <Results model={model} regime={state.regime} current={view.current} baseline={view.baseline} />
         </div>
-        <TimePathPanel paths={view.current.timePaths ?? []} />
+        <TimePathPanel paths={view.current.timePaths ?? []} note={model.timePathNote} period={period} />
         <ExplanationPanel model={model} sentences={view.sentences} />
       </main>
     </div>

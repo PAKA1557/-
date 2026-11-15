@@ -255,8 +255,8 @@ export function toADASParams(values: Values): ADASParams {
   return p
 }
 
-const DEFAULT_X: [number, number] = [800, 1400]
-const DEFAULT_Y: [number, number] = [0, 4]
+const DEFAULT_X: [number, number] = [900, 1300]
+const DEFAULT_Y: [number, number] = [1, 3]
 /** Graph ranges follow at most this many periods of an unanchored (drifting) path. */
 const DRIFT_FIT_PERIODS = 8
 
@@ -547,7 +547,7 @@ export const adasModel: ModelDefinition = {
     { term: 'LRAS (장기 총공급)', text: '기대가 실현된 상태(P = Pe)의 공급. 자연산출 Ȳ에서 수직입니다.' },
     { term: '자연산출', text: '물가 기대가 맞아떨어질 때의 산출 수준. 장기에는 총수요와 무관하게 이 값으로 돌아옵니다.' },
     { term: '화폐 중립성', text: '장기에 통화량 변화가 물가만 같은 비율로 바꾸고 산출·실질금리 같은 실물 변수는 바꾸지 못한다는 성질.' },
-    { term: '적응적 기대', text: '사람들이 이번 기의 물가를 보고 다음 기 기대 물가를 정하는 방식(Pe_{t+1} = P_t). 기대가 늦게 따라오므로 단기에는 산출이 변합니다.' },
+    { term: '적응적 기대', text: '사람들이 이번 기의 물가를 보고 다음 기의 기대 물가로 삼는 방식(다음 기 Pe = 이번 기 P). 기대가 늦게 따라오므로 단기에는 산출이 변합니다.' },
   ],
   timePathNote: `정책이 1기에 바뀐 뒤 ${ADAS_HORIZON}기까지의 조정 경로입니다. 0기는 기준점의 균형입니다. 아래 기간 슬라이더로 특정 기를 그래프와 함께 볼 수 있습니다.`,
   lockedVariables: (regime) => LOCKS[toRegime(regime)],

@@ -17,7 +17,8 @@ export function Results({ model, regime, current, baseline }: Props) {
         {model.outputs.map((o) => {
           const v = current.values[o.key]
           const d = v - baseline.values[o.key]
-          const showDelta = Math.abs(d) >= 0.5 * 10 ** -o.digits
+          const known = Number.isFinite(d)
+          const showDelta = known && Math.abs(d) >= 0.5 * 10 ** -o.digits
           return (
             <div key={o.key} className={`out${locked.has(o.key) ? ' out-locked' : ''}${flagged.has(o.key) ? ' out-flag' : ''}`}>
               <dt>
@@ -25,10 +26,10 @@ export function Results({ model, regime, current, baseline }: Props) {
               </dt>
               <dd data-testid={`out-${o.key}`}>
                 {fmt(v, o.digits)}
-                {o.unit}
+                {Number.isFinite(v) ? o.unit : ''}
               </dd>
               <dd className={`delta${showDelta ? (d > 0 ? ' up' : ' down') : ''}`}>
-                {showDelta ? `${d > 0 ? '+' : '−'}${fmt(Math.abs(d), o.digits)}` : '±0'}
+                {showDelta ? `${d > 0 ? '+' : '−'}${fmt(Math.abs(d), o.digits)}` : known ? '±0' : '—'}
               </dd>
             </div>
           )
