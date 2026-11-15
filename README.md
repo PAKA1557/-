@@ -1,12 +1,14 @@
 # 거시경제 정책 시뮬레이터
 
 학부 거시경제학 수업용 웹 시뮬레이터입니다. 재정지출·통화량·기준금리·기대인플레이션을 슬라이더로 움직이면
-IS-LM 균형이 어떻게 바뀌는지 그래프, 수준 변화, 한국어 해설로 바로 보여 줍니다.
+IS-LM 균형과 AD-AS의 단기·장기 조정 경로가 어떻게 바뀌는지 그래프, 시간 경로, 한국어 해설로 바로 보여 줍니다.
 시나리오는 URL에 저장되므로 링크로 공유할 수 있습니다.
 
 > 개념을 익히기 위한 **교육용 단순 모형**이며, 실제 경제에 대한 예측이 아닙니다.
 
 ![IS-LM 화면](docs/screenshot-islm.png)
+
+![AD-AS 화면: 통화량 증가 후 조정 경로](docs/screenshot-adas.png)
 
 ## 실행과 테스트
 
@@ -19,7 +21,7 @@ npm run build      # 타입 검사 + 프로덕션 빌드 (dist/)
 npm run preview    # 빌드 결과 미리 보기
 npm test           # Vitest 단위·속성 테스트
 npm run lint       # oxlint
-npm run smoke      # 빌드 후 실행: vite preview + Playwright 스모크 테스트, docs/screenshot-islm.png 갱신
+npm run smoke      # 빌드 후 실행: vite preview + Playwright 스모크 테스트, docs/screenshot-islm.png·screenshot-adas.png 갱신
 ```
 
 `npm run smoke`는 설치된 `playwright` 패키지(로컬 또는 전역)와 Chromium을 사용하며, 브라우저를 내려받지 않습니다.
@@ -31,8 +33,10 @@ Vite `base`는 환경변수 `BASE_PATH`로 정하며, 기본값은 상대 경로
 
 - `src/engine/` — 순수 TypeScript(React·DOM 의존 없음). 모형 정의와 해법. 각 모형은 `ModelDefinition`을 구현합니다:
   변수·파라미터 메타데이터, 정책 운영 방식(regime), 방식별로 잠기는 변수와 그 이유, `solve()`(균형값 + 곡선 좌표 + 선택적 시간 경로 + 경고),
-  `explain()`(기준점 대비 변화 해설).
-- `src/state/` — 시나리오 상태(모형, 운영 방식, 변수값, 기준점), `useReducer`용 리듀서, URL 쿼리스트링 직렬화.
+  `explain()`(기준점 대비 변화 해설). 동적 모형은 `Solution.trajectory`(기간별 균형점과 그 기의 곡선),
+  `markers`(E₀·단기·장기 균형점), `kind: 'dynamic'` 시간 경로를 함께 돌려줍니다.
+- `src/state/` — 시나리오 상태(모형, 운영 방식, 변수값, 기준점), `useReducer`용 리듀서, URL 쿼리스트링 직렬화(`model=` 포함).
+  모형 탭을 바꾸면 두 모형에 모두 있는 변수(G, M, i, πe, 공통 파라미터)와 운영 방식은 그대로 유지됩니다.
 - `src/ui/` — React 컴포넌트: 모형 탭, 정책 변수 패널, 균형 그래프(SVG 직접 작성), 시간 경로, 해설.
 
 새 모형은 `src/engine/registry.ts`에 `ModelDefinition`을 등록하면 UI 셸을 바꾸지 않고 붙습니다.
@@ -40,7 +44,7 @@ Vite `base`는 환경변수 `BASE_PATH`로 정하며, 기본값은 상대 경로
 ## 모형 로드맵
 
 1. **IS-LM** (구현됨) — 폐쇄경제, 물가 고정, 선형
-2. **AD-AS** (준비 중)
+2. **AD-AS** (구현됨) — 물가 내생, 적응적 기대, 40기 조정 경로
 3. **IS-MP-PC** (준비 중)
 4. **뉴케인지언** (준비 중)
 
@@ -68,3 +72,34 @@ $$
 
 기본값: $c_0=200,\ c_1=0.75,\ T=100,\ b_0=200,\ b_1=25,\ G=100,\ M=1000,\ P=2,\ k=1,\ h=100,\ \pi^e=0$
 → $Y^*=1100,\ i^*=6\%$. 금리는 % 단위입니다.
+
+## AD-AS 모형
+
+IS-LM의 재화·화폐시장을 그대로 쓰되 물가 $P$가 결과로 정해지고, 시간이 등장합니다.
+
+$$
+\begin{aligned}
+\text{AD (통화량 목표):}\quad & Y^{AD}(P) = \frac{c_0 - c_1 T + b_0 + G + b_1 \pi^e + \frac{b_1}{h}\frac{M}{P}}{1 - c_1 + \frac{b_1 k}{h}} \;=\; \alpha + \frac{\beta}{P} \\
+\text{SRAS:}\quad & P_t = P^e_t + \tfrac{1}{a}\,(Y_t - \bar Y) \\
+\text{적응적 기대:}\quad & P^e_{t+1} = P_t \\
+\text{LRAS:}\quad & Y = \bar Y
+\end{aligned}
+$$
+
+매기 AD와 SRAS의 교점을 정확히 풉니다. 두 식을 합치면 $P$에 대한 이차방정식
+$aP^2 + (\bar Y - aP^e_t - \alpha)P - \beta = 0$이 되고($\beta > 0$), 양의 근은 하나뿐입니다.
+그다음 $i_t = (kY_t - M/P_t)/h$, $r_t = i_t - \pi^e$, $I_t$, $C_t$를 계산합니다.
+
+- 0기는 기준점의 장기 균형($Y = \bar Y$, $P^e = P$)이고, 바뀐 정책은 1기부터 적용되어 40기까지 시뮬레이션합니다.
+- 장기 균형: $P^* = \beta / (\bar Y - \alpha)$. $M$을 $\lambda$배 하면 $P^*$도 $\lambda$배가 되고
+  $Y$, $i$, $r$, $I$는 그대로입니다(화폐 중립성). 재정지출을 늘리면 장기에 $Y = \bar Y$로 돌아오고 $P$와 $i$는 오르며, 투자는 $\Delta G$만큼 줄어듭니다(완전 구축).
+- 통화량 목표제에서 조정은 **단조 수렴**입니다. $P_t$는 진동 없이 한쪽에서 $P^*$로 다가가며,
+  산출 갭은 기본값 근처에서 매기 대략 $1/(1 + \beta/(aP^{*2}))$배로 줄어듭니다(기본값에서 약 0.44).
+- 금리 목표제에서는 중앙은행이 $i$를 고정하고 $M$이 결과로 정해지므로 AD가
+  $Y = [c_0 - c_1T + b_0 + G - b_1(i - \pi^e)]/(1 - c_1)$에서 **수직**입니다.
+  이 값이 $\bar Y$와 다르면 물가가 매기 $(Y - \bar Y)/a$씩 끝없이 움직입니다. 이 모형에서 금리 고정은
+  물가를 붙잡아 둘 닻이 없고, 화면에도 이 경고가 표시됩니다(다음 단계 IS-MP-PC의 테일러 준칙으로 이어짐).
+  물가가 0 이하로 떨어지면 그 기간부터는 계산하지 않습니다.
+
+기본값: IS-LM과 같은 파라미터에 $a = 100$(SRAS 기울기 $1/a = 0.01$), $\bar Y = 1100$
+→ 초기 정상상태 $Y = \bar Y = 1100,\ P = P^e = 2,\ i = 6\%$.
