@@ -173,3 +173,55 @@ describe('explanations', () => {
     expect(text).toContain('기준금리 인상')
   })
 })
+
+describe('model definition edge cases', () => {
+  it.each([
+    { i: 8, M: 200, warns: false },
+    { i: 8.5, M: 0, warns: true },
+    { i: 9, M: -200, warns: true },
+  ])('rate target i = $i produces M = $M and money warning = $warns', ({ i, M, warns }) => {
+    const s = islmModel.solve({ regime: 'rate', values: { i } })
+
+    expect(s.values.M).toBe(M)
+    expect(s.warnings.some((w) => w.key === 'M' && w.message.length > 0)).toBe(warns)
+  })
+
+  it.each([
+    { M: 3200, i: 0.5, warns: false },
+    { M: 3400, i: 0, warns: false },
+    { M: 3600, i: -0.5, warns: true },
+  ])('money target M = $M produces i = $i and rate warning = $warns', ({ M, i, warns }) => {
+    const s = islmModel.solve({ regime: 'money', values: { M } })
+
+    expect(s.values.i).toBe(i)
+    expect(s.warnings.some((w) => w.key === 'i' && w.message.length > 0)).toBe(warns)
+  })
+
+  describe.each(['money', 'rate'])('%s regime curve endpoints', (regime) => {
+    it.each<[number, number]>([
+      [-125.5, 2325.5],
+      [800, 900],
+      [1200, 1200],
+    ])('respects xDomain [%s, %s]', (x0, x1) => {
+      const s = islmModel.solve({ regime, values: {} }, { xDomain: [x0, x1] })
+
+      expect(s.curves.map((c) => c.id)).toEqual(['IS', 'LM'])
+      for (const curve of s.curves) {
+        expect(curve.points[0].x).toBe(x0)
+        expect(curve.points[curve.points.length - 1].x).toBe(x1)
+        expect(curve.points.every(({ x }) => x >= x0 && x <= x1)).toBe(true)
+      }
+    })
+  })
+
+  it.each([
+    { regime: 'money', key: 'i' },
+    { regime: 'rate', key: 'M' },
+  ])('locks $key in the $regime regime', ({ regime, key }) => {
+    const locks = islmModel.lockedVariables(regime)
+
+    expect(locks.map((lock) => lock.key)).toEqual([key])
+    expect(locks[0].resultKey).toBe(key)
+    expect(locks[0].reason.length).toBeGreaterThan(0)
+  })
+})
