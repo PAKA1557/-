@@ -20,7 +20,11 @@ export type Action =
   | { type: 'regime'; regime: string }
   | { type: 'saveBaseline' }
   | { type: 'reset' }
-  | { type: 'model'; model: ModelId }
+  /**
+   * Switch model tab. `remembered` is the state last left on the target tab;
+   * it is resumed when the two models share no variable (nothing to carry).
+   */
+  | { type: 'model'; model: ModelId; remembered?: ScenarioState }
   | { type: 'load'; state: ScenarioState }
 
 export function requireModel(id: ModelId): ModelDefinition {
@@ -85,9 +89,16 @@ export function carrySnapshot(snap: Snapshot, to: ModelDefinition): Snapshot {
   return { regime, values }
 }
 
-function switchModel(state: ScenarioState, id: ModelId): ScenarioState {
+/** Variable keys two models have in common (carried over on a tab switch). */
+export function sharedKeys(a: ModelDefinition, b: ModelDefinition): string[] {
+  const keys = new Set(b.variables.map((v) => v.key))
+  return a.variables.filter((v) => keys.has(v.key)).map((v) => v.key)
+}
+
+function switchModel(state: ScenarioState, id: ModelId, remembered?: ScenarioState): ScenarioState {
   const to = getModel(id)
   if (!to || id === state.model) return state
+  if (remembered && remembered.model === id && sharedKeys(requireModel(state.model), to).length === 0) return remembered
   return { model: to.id, ...carrySnapshot(state, to), baseline: carrySnapshot(state.baseline, to) }
 }
 
@@ -105,7 +116,7 @@ export function reducer(state: ScenarioState, action: Action): ScenarioState {
     case 'reset':
       return initialState(state.model)
     case 'model':
-      return switchModel(state, action.model)
+      return switchModel(state, action.model, action.remembered)
     case 'load':
       return action.state
   }

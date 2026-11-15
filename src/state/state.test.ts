@@ -117,6 +117,23 @@ describe('reducer', () => {
     expect(parse(serialize(back))).toEqual(back)
   })
 
+  it('IS-MP-PC shares no variables: switching there and back leaves the other model untouched', () => {
+    let islm = reducer(initialState(), { type: 'set', key: 'G', value: 150 })
+    islm = reducer(islm, { type: 'set', key: 'P', value: 3 })
+    const pc = reducer(islm, { type: 'model', model: 'ismppc' })
+    expect(pc).toEqual(initialState('ismppc'))
+    const shocked = reducer(pc, { type: 'set', key: 'nu', value: 1 })
+    // Without a remembered state the target starts from its defaults (nothing carried, nothing corrupted).
+    expect(reducer(shocked, { type: 'model', model: 'islm' })).toEqual(initialState('islm'))
+    // With the state last left on that tab, it resumes exactly.
+    const back = reducer(shocked, { type: 'model', model: 'islm', remembered: islm })
+    expect(back).toEqual(islm)
+    expect(reducer(back, { type: 'model', model: 'ismppc', remembered: shocked }).values.nu).toBe(1)
+    // A remembered state is ignored when variables can be carried (IS-LM ↔ AD-AS keeps its behaviour).
+    const adas = reducer(islm, { type: 'model', model: 'adas', remembered: initialState('adas') })
+    expect(adas.values.G).toBe(150)
+  })
+
   it('AD-AS regime switch carries the long-run rate, so the peg does not drift', () => {
     let s = initialState('adas')
     s = reducer(s, { type: 'set', key: 'M', value: 1200 })
