@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { ModelDefinition, Solution, Values, VariableSpec } from '../engine/types'
 import { ChoiceControl, LockedVariable, Slider } from './Slider'
 
@@ -9,6 +9,16 @@ interface Props {
   solution: Solution
   onSet: (key: string, value: number) => void
   onRegime: (regime: string) => void
+}
+
+function ControlSection({ title, initialOpen, changed, children }: { title: string; initialOpen: boolean; changed: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(initialOpen)
+  return (
+    <details className="control-section" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>{title}{changed && <span className="changed-badge">변경됨</span>}</summary>
+      {children}
+    </details>
+  )
 }
 
 export function ControlPanel({ model, regime, values, solution, onSet, onRegime }: Props) {
@@ -22,14 +32,21 @@ export function ControlPanel({ model, regime, values, solution, onSet, onRegime 
     return <Slider key={v.key} spec={v} value={values[v.key]} onChange={(x) => onSet(v.key, x)} />
   }
   const render = (group: 'policy' | 'param') => {
-    const out: ReactNode[] = []
-    let section: string | undefined
-    for (const v of model.variables.filter((u) => u.group === group && visible(u))) {
-      if (v.section && v.section !== section) out.push(<h3 key={`s-${v.section}`} className="control-section">{v.section}</h3>)
-      section = v.section
-      out.push(control(v))
+    const variables = model.variables.filter((u) => u.group === group)
+    if (group === 'param') return variables.filter(visible).map(control)
+    const sections = new Map<string, VariableSpec[]>()
+    for (const v of variables) {
+      const title = v.section ?? '정책 변수'
+      sections.set(title, [...(sections.get(title) ?? []), v])
     }
-    return out
+    return [...sections].map(([title, specs], index) => {
+      const changed = specs.some((v) => values[v.key] !== v.default && !locks.has(v.key))
+      return (
+        <ControlSection key={`${model.id}-${title}`} title={title} changed={changed} initialOpen={index === 0 || changed}>
+          {specs.filter(visible).map(control)}
+        </ControlSection>
+      )
+    })
   }
   const current = model.regimes.find((r) => r.id === regime)
 

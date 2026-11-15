@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { adasModel } from '../engine/adas'
 import { islmModel } from '../engine/islm'
 import { ismppcModel } from '../engine/ismppc'
+import { nkModel } from '../engine/nk'
 import type { ModelDefinition } from '../engine/types'
-import { clampTo, initialState, reducer, type ScenarioState } from './scenario'
+import { clampTo, initialState, reducer, requireModel, sharedKeys, type ScenarioState } from './scenario'
 import { parse, serialize } from './url'
 
 const valuesArb = (model: ModelDefinition) =>
@@ -24,6 +25,16 @@ const stateArbFor = (model: ModelDefinition, regimes: fc.Arbitrary<string> = reg
 const stateArb = stateArbFor(islmModel)
 
 describe('URL serialization', () => {
+  it('round-trips NK parameters, shocks, persistence and baseline', () => {
+    fc.assert(fc.property(stateArbFor(nkModel, fc.constant('taylor')), (s) => {
+      expect(parse(serialize(s))).toEqual(s)
+    }), { numRuns: 500 })
+    expect(serialize(initialState('nk'))).toBe('model=nk')
+    const s = parse('?model=nk&dRn=2&rhoRn=0.95&uShock=-1&vShock=1&phiPi=0.8&phiX=0&b.target=3')
+    expect(s.values).toMatchObject({ dRn: 2, rhoRn: 0.95, uShock: -1, vShock: 1, phiPi: 0.8, phiX: 0 })
+    expect(s.baseline.values.target).toBe(3)
+    expect(parse(serialize(s))).toEqual(s)
+  })
   it('default state serializes to an empty query', () => {
     expect(serialize(initialState())).toBe('')
     expect(parse('')).toEqual(initialState())
@@ -70,6 +81,19 @@ describe('URL serialization', () => {
 })
 
 describe('reducer', () => {
+  it('NK shares no values with any other model and resumes its remembered state', () => {
+    for (const id of ['islm', 'adas', 'ismppc'] as const) {
+      expect(sharedKeys(nkModel, requireModel(id))).toEqual([])
+      const other = reducer(initialState(id), { type: 'set', key: id === 'ismppc' ? 'piStar' : 'G', value: id === 'ismppc' ? 5 : 150 })
+      expect(reducer(other, { type: 'model', model: 'nk' })).toEqual(initialState('nk'))
+      let nk = reducer(initialState('nk'), { type: 'set', key: 'target', value: 1 })
+      nk = reducer(nk, { type: 'set', key: 'uShock', value: 2 })
+      expect(reducer(nk, { type: 'model', model: id })).toEqual(initialState(id))
+      const back = reducer(nk, { type: 'model', model: id, remembered: other })
+      expect(back).toEqual(other)
+      expect(reducer(back, { type: 'model', model: 'nk', remembered: nk })).toEqual(nk)
+    }
+  })
   it('regime switch carries the equilibrium over so Y does not jump', () => {
     let s = reducer(initialState(), { type: 'set', key: 'G', value: 150 })
     const before = islmModel.solve(s).values
@@ -87,10 +111,10 @@ describe('reducer', () => {
     expect(reducer(s, { type: 'reset' })).toEqual(initialState())
   })
 
-  it('ignores unknown variables and unimplemented models', () => {
+  it('ignores unknown variables and selecting the current model', () => {
     const s = initialState()
     expect(reducer(s, { type: 'set', key: 'nope', value: 1 })).toBe(s)
-    expect(reducer(s, { type: 'model', model: 'nk' })).toBe(s)
+    expect(reducer(s, { type: 'model', model: 'nk' })).toEqual(initialState('nk'))
     expect(reducer(s, { type: 'model', model: 'islm' })).toBe(s)
   })
 

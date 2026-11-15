@@ -156,6 +156,8 @@ export interface StabilityReadout {
   /** Formatted value, e.g. "0.923". */
   value: string
   status: 'stable' | 'unit' | 'unstable'
+  /** Badge text; defaults to a generic label for the status (e.g. "안정"). */
+  statusLabel?: string
   /** One or two Korean sentences explaining the condition. */
   text: string
   /** Optional KaTeX formula of the condition. */

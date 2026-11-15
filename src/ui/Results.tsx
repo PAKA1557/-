@@ -11,7 +11,7 @@ function Stability({ s }: { s: StabilityReadout }) {
         <span>{s.label}</span>
         <strong data-testid="stability-value">{s.value}</strong>
         <span className="stability-badge" data-testid="stability-status">
-          {STATUS_LABEL[s.status]}
+          {s.statusLabel ?? STATUS_LABEL[s.status]}
         </span>
       </div>
       {s.latex && <Tex latex={s.latex} display />}
@@ -30,10 +30,16 @@ interface Props {
 export function Results({ model, regime, current, baseline }: Props) {
   const locked = new Set(model.lockedVariables(regime).map((l) => l.resultKey))
   const flagged = new Set(current.warnings.map((w) => w.key))
+  const groups = current.trajectory ? [
+    { title: '1기 · 충격 직후', outputs: model.outputs.filter((o) => !o.key.endsWith('LR')) },
+    { title: '장기 균형', outputs: model.outputs.filter((o) => o.key.endsWith('LR')) },
+  ] : [{ title: '균형값', outputs: model.outputs }]
   return (
     <div className="results">
+      {groups.filter((g) => g.outputs.length).map((g) => <section className="result-group" key={g.title} aria-label={g.title}>
+      <h3>{g.title}</h3>
       <dl className="outputs">
-        {model.outputs.map((o) => {
+        {g.outputs.map((o) => {
           const v = current.values[o.key]
           const d = v - baseline.values[o.key]
           const known = Number.isFinite(d)
@@ -54,6 +60,7 @@ export function Results({ model, regime, current, baseline }: Props) {
           )
         })}
       </dl>
+      </section>)}
       {current.stability && <Stability s={current.stability} />}
       {current.warnings.length > 0 && (
         <ul className="warnings" role="status">

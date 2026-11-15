@@ -107,7 +107,10 @@ h3 {
 
 .tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -116,6 +119,8 @@ h3 {
 }
 
 .tab {
+  flex-shrink: 0;
+  white-space: nowrap;
   font: inherit;
   font-size: 0.9rem;
   border: 0;
@@ -208,15 +213,20 @@ summary:focus-visible {
 .layout {
   display: grid;
   gap: 14px;
-  grid-template-columns: 300px minmax(0, 1fr) 290px;
+  grid-template-columns: 300px minmax(0, 1fr);
   grid-template-areas:
-    'controls center paths'
-    'explain explain explain';
+    'controls center'
+    'explain explain';
   align-items: start;
 }
 
 .controls {
   grid-area: controls;
+  position: sticky;
+  top: 14px;
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .center {
   grid-area: center;
@@ -226,7 +236,7 @@ summary:focus-visible {
   min-width: 0;
 }
 .timepaths {
-  grid-area: paths;
+  min-width: 0;
 }
 .explain {
   grid-area: explain;
@@ -234,11 +244,7 @@ summary:focus-visible {
 
 @media (max-width: 1150px) {
   .layout {
-    grid-template-columns: 300px minmax(0, 1fr);
-    grid-template-areas:
-      'controls center'
-      'controls paths'
-      'explain explain';
+    grid-template-columns: 280px minmax(0, 1fr);
   }
 }
 
@@ -248,8 +254,18 @@ summary:focus-visible {
   }
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'center' 'controls' 'paths' 'explain';
+    grid-template-areas: 'graph' 'results' 'controls' 'paths' 'explain';
   }
+  .center { display: contents; }
+  .graph { grid-area: graph; }
+  .results { grid-area: results; }
+  .timepaths { grid-area: paths; }
+  .controls {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+  .tabs { order: 3; flex-basis: 100%; }
   .actions {
     margin-left: 0;
   }
@@ -288,7 +304,8 @@ summary:focus-visible {
 
 /* ---------- controls ---------- */
 .control {
-  padding: 10px 0;
+  position: relative;
+  padding: 8px 0;
   border-top: 1px solid var(--border);
 }
 
@@ -301,6 +318,7 @@ summary:focus-visible {
 }
 
 .control-value {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -444,6 +462,7 @@ summary:focus-visible {
   height: auto;
   display: block;
   touch-action: pan-y;
+  max-height: 440px;
 }
 
 .chart text {
@@ -502,6 +521,10 @@ summary:focus-visible {
   font-weight: 700;
   font-size: 12px !important;
   fill: var(--text) !important;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 5px;
+  stroke-linejoin: round;
 }
 
 .sel-label {
@@ -578,7 +601,13 @@ summary:focus-visible {
   font-weight: 700;
   font-size: 13px !important;
   fill: var(--text) !important;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 5px;
+  stroke-linejoin: round;
 }
+
+.label-leader { stroke: var(--muted); stroke-width: 0.75; stroke-dasharray: 2 2; }
 
 .ghost-label {
   fill: var(--muted) !important;
@@ -640,7 +669,7 @@ summary:focus-visible {
 
 .outputs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
   gap: 4px;
   margin: 0;
 }
@@ -709,7 +738,11 @@ summary:focus-visible {
 
 /* ---------- time paths ---------- */
 .path {
-  margin: 12px 0 0;
+  margin: 0;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .path figcaption {
@@ -717,7 +750,20 @@ summary:focus-visible {
   justify-content: space-between;
   font-size: 0.85rem;
   font-weight: 600;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+
+.path-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.path-reference { margin: 3px 0 0; font-size: 0.75rem; color: var(--muted); }
+.path svg { max-height: 170px; }
+.result-group + .result-group { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
+.result-group h3 { font-size: 0.8rem; margin: 0 8px; }
+.control-label { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.control-help { flex-shrink: 0; }
+.control-help summary { cursor: pointer; color: var(--accent); list-style: none; line-height: 1; }
+.control-help summary::-webkit-details-marker { display: none; }
+.control-help p { position: absolute; left: 0; right: 0; top: 22px; z-index: 2; margin: 0; padding: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; box-shadow: 0 4px 15px #0002; }
 
 .path svg {
   width: 100%;
@@ -850,12 +896,15 @@ summary:focus-visible {
 
 /* ---------- control sections, choices, stability (IS-MP-PC) ---------- */
 .control-section {
-  margin: 14px 0 0;
-  padding-top: 10px;
-  border-top: 2px solid var(--border);
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
   font-size: 0.86rem;
   color: var(--text);
 }
+
+.control-section > summary { cursor: pointer; font-weight: 700; padding: 5px 0; }
+.changed-badge { margin-left: 8px; color: var(--accent); font-size: 0.7rem; font-weight: 400; }
 
 .control-section + .control {
   border-top: 0;
@@ -868,17 +917,22 @@ summary:focus-visible {
   border-bottom: 0;
   margin: 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-top: 0;
 }
+.control.choice .segmented { flex: 1; }
 
 .choice-legend {
   font-size: 0.85rem;
   padding: 0;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   color: var(--text-2);
 }
 
 .control.choice .seg {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   padding: 6px 2px;
 }
 
@@ -929,4 +983,11 @@ summary:focus-visible {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
+}
+
+@media (max-width: 500px) {
+  .path-grid { grid-template-columns: minmax(0, 1fr); }
+  .panel { padding: 12px; }
+  .outputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chart { max-height: none; }
 }
