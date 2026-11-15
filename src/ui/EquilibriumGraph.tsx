@@ -156,6 +156,25 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
     return { m, box }
   })
 
+  // Curve labels sit at the curve's exit from the plot; when two curves leave
+  // close together (e.g. NKPC next to the LRAS), step the later label down
+  // so it clears the earlier ones and the point labels. Boxes assume the
+  // phone font (18 user units), the larger of the two.
+  const curveLabels = [...shown, ...selCurves].flatMap((c) => {
+    const a = labelAnchor(c, xDomain, yDomain)
+    if (!a) return []
+    const vertical = c.points.length > 1 && c.points[0].x === c.points[c.points.length - 1].x
+    const lx = clamp(x(a.x) - 8, M.l + Math.max(50, c.label.length * 18), W - M.r - 10)
+    const width = c.label.length * 13 + 4
+    const base = y(a.y) + (vertical ? 20 : -12)
+    // glyphs span about 18 units above and 5 below the baseline; keep 2 spare
+    const boxAt = (ly: number): LabelBox => ({ left: lx - width - 2, top: ly - 20, width: width + 4, height: 27 })
+    const candidates = [0, 26, -26, 52, -52, 78].map((d) => clamp(base + d, M.t + 22, H - M.b - 16))
+    const ly = candidates.find((v) => !occupied.some((b) => overlap(boxAt(v), b))) ?? candidates[0]
+    occupied.push(boxAt(ly))
+    return [{ c, lx, ly }]
+  })
+
   return (
     <section className="panel graph" aria-labelledby="graph-title">
       <div className="panel-head">
@@ -292,15 +311,11 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         ))}
 
         {/* direct curve labels, outside the clip so they never get cut */}
-        {[...shown, ...selCurves].map((c) => {
-          const a = labelAnchor(c, xDomain, yDomain)
-          const vertical = c.points.length > 1 && c.points[0].x === c.points[c.points.length - 1].x
-          return a ? (
-            <text key={`l${c.id}`} className={`curve-label${selCurves.includes(c) ? ' sel-label' : ''}`} textAnchor="end" x={clamp(x(a.x) - 8, M.l + Math.max(50, c.label.length * 18), W - M.r - 10)} y={clamp(y(a.y) + (vertical ? 20 : -12), M.t + 22, H - M.b - 16)}>
-              {c.label}
-            </text>
-          ) : null
-        })}
+        {curveLabels.map(({ c, lx, ly }) => (
+          <text key={`l${c.id}`} className={`curve-label${selCurves.includes(c) ? ' sel-label' : ''}`} textAnchor="end" x={lx} y={ly}>
+            {c.label}
+          </text>
+        ))}
 
         {/* value labels on the axes */}
         {inBox(tagPoint) && (

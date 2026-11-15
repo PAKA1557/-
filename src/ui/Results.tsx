@@ -4,14 +4,14 @@ import { Tex } from './Tex'
 
 const STATUS_LABEL: Record<StabilityReadout['status'], string> = { stable: '안정', unit: '수렴하지 않음', unstable: '불안정' }
 
-function Stability({ s, labels }: { s: StabilityReadout; labels: Record<StabilityReadout['status'], string> }) {
+function Stability({ s }: { s: StabilityReadout }) {
   return (
     <div className={`stability ${s.status}`} data-testid="stability">
       <div className="stability-head">
         <span>{s.label}</span>
         <strong data-testid="stability-value">{s.value}</strong>
         <span className="stability-badge" data-testid="stability-status">
-          {labels[s.status]}
+          {s.statusLabel ?? STATUS_LABEL[s.status]}
         </span>
       </div>
       {s.latex && <Tex latex={s.latex} display />}
@@ -34,8 +34,6 @@ export function Results({ model, regime, current, baseline }: Props) {
     { title: '1기 · 충격 직후', outputs: model.outputs.filter((o) => !o.key.endsWith('LR')) },
     { title: '장기 균형', outputs: model.outputs.filter((o) => o.key.endsWith('LR')) },
   ] : [{ title: '균형값', outputs: model.outputs }]
-  const statusLabels = current.stability?.label === '결정성 조건'
-    ? { stable: '결정적', unit: '결정성 경계', unstable: '비결정적' } : STATUS_LABEL
   return (
     <div className="results">
       {groups.filter((g) => g.outputs.length).map((g) => <section className="result-group" key={g.title} aria-label={g.title}>
@@ -63,7 +61,7 @@ export function Results({ model, regime, current, baseline }: Props) {
         })}
       </dl>
       </section>)}
-      {current.stability && <Stability s={current.stability} labels={statusLabels} />}
+      {current.stability && <Stability s={current.stability} />}
       {current.warnings.length > 0 && (
         <ul className="warnings" role="status">
           {current.warnings.map((w) => (

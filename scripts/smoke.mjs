@@ -2,7 +2,8 @@
 // in Chromium, move the G slider and check that the displayed Y changes; then
 // open the AD-AS tab, move M and check the short-/long-run numbers; then
 // open the IS-MP-PC tab, apply a supply shock and make the Taylor rule
-// violate the Taylor principle.
+// violate the Taylor principle; then open the 뉴케인지언 tab, apply a
+// cost-push shock and make the rule indeterminate (φπ < 1).
 // Includes NK rational-expectations, determinacy and tab-state checks.
 // Writes docs/screenshot-{islm,adas,ismppc,nk}.png.
 // Run `npm run build` first.
@@ -216,31 +217,71 @@ try {
   // ---- New Keynesian ----
   await page.getByRole('tab', { name: '뉴케인지언' }).click()
   await page.waitForFunction(() => location.search === '?model=nk')
-  for (const [key, expected] of Object.entries({ Y1: '100.00', pi1: '2.00%', i1: '4.00%', r1: '2.00%' })) {
-    if (await read(`out-${key}`) !== expected) throw new Error(`unexpected NK default ${key}`)
+  const nkBefore = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`NK before: ${JSON.stringify(nkBefore)}`)
+  if (nkBefore.Y1 !== '100.00' || nkBefore.pi1 !== '2.00%' || nkBefore.i1 !== '4.00%' || nkBefore.r1 !== '2.00%') {
+    throw new Error(`unexpected NK steady state ${JSON.stringify(nkBefore)}`)
   }
-  if (await read('stability-value') !== '0.170') throw new Error('unexpected NK determinacy condition')
-  await reveal(page.locator('input[type=range][name=u]'))
-  await page.locator('input[type=range][name=u]').fill('1')
-  if (!(parseFloat(await read('out-Y1')) < 100 && parseFloat(await read('out-pi1')) > 2)) throw new Error('NK cost shock signs incorrect')
+  const det = await read('stability-status')
+  console.log(`determinacy: ${await read('stability-value')} (${det})`)
+  if (await read('stability-value') !== '0.252' || det !== '결정') throw new Error(`unexpected NK determinacy at defaults: ${await read('stability-value')} (${det})`)
+  await reveal(page.getByTestId('locked-Mnk'))
+  if (!(await page.getByTestId('locked-Mnk').isVisible())) throw new Error('NK money supply is not shown as a locked outcome')
+  const uSlider = page.locator('input[type=range][name=uShock]')
+  await reveal(uSlider)
+  await uSlider.focus()
+  for (let n = 0; n < 4; n++) await page.keyboard.press('ArrowRight')
+  const u = await read('input-uShock')
+  const nkAfter = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`NK after u ${u}: ${JSON.stringify(nkAfter)}`)
+  if (u !== '1.00%p') throw new Error(`expected u 1.00%p, got ${u}`)
+  if (!(parseFloat(nkAfter.Y1) < 100 && parseFloat(nkAfter.pi1) > 2)) throw new Error(`NK cost-push shock is not stagflationary: ${JSON.stringify(nkAfter)}`)
+  if (!page.url().includes('uShock=1')) throw new Error(`URL not updated: ${page.url()}`)
+  const nkText = await page.getByTestId('explanation').textContent()
+  if (!nkText?.includes('스태그플레이션')) throw new Error('NK explanation does not mention stagflation')
+  const nkDots = await page.locator('[data-testid=trajectory] circle').count()
+  if (nkDots !== 41) throw new Error(`expected 41 NK path dots, got ${nkDots}`)
+  // the selected period's NKPC moves with expected inflation and the shock
   const nkpc1 = await page.getByTestId('curve-NKPC').getAttribute('d')
   await scrub.fill('3')
-  if (await page.getByTestId('curve-NKPC').getAttribute('d') === nkpc1) throw new Error('NKPC did not follow period')
+  if (await page.getByTestId('curve-NKPC').getAttribute('d') === nkpc1) throw new Error('NKPC did not follow the selected period')
+  // no persistence: back at the steady state in period 2
   await page.locator('input[type=range][name=rhoU]').fill('0')
   await scrub.fill('2')
-  if (await read('path-pi') !== '2기: 2.00%') throw new Error('NK did not return in period 2 at rho = 0')
-  await page.locator('input[type=range][name=phiPi]').fill('0.8')
-  await page.locator('input[type=range][name=phiX]').fill('0')
-  if (await read('stability-status') !== '비결정적' || !(await page.locator('.warnings').textContent()).includes('유일한 균형이 없음')) throw new Error('NK indeterminacy warning absent')
-  if (await read('out-Y1') !== '—') throw new Error('NK reports an indeterminate equilibrium')
+  if (await read('path-pi') !== '2기: 2.00%') throw new Error(`NK did not return in period 2 at ρu = 0 (${await read('path-pi')})`)
+  await scrub.fill('1')
+
+  // φπ < 1: indeterminacy warning, MSV path still drawn, no crash
+  const phiPiSlider = page.locator('input[type=range][name=phiPi]')
+  await reveal(phiPiSlider)
+  await phiPiSlider.fill('0.8')
+  const phiPi = await read('input-phiPi')
+  const indet = await read('stability-status')
+  const nkWarn = await page.locator('.warnings').textContent()
+  const Y1indet = await read('out-Y1')
+  console.log(`φπ ${phiPi}: determinacy ${await read('stability-value')} (${indet}), Y₁ ${Y1indet}`)
+  if (phiPi !== '0.8' || indet !== '비결정' || !nkWarn?.includes('비결정') || !nkWarn.includes('테일러 원칙')) {
+    throw new Error(`indeterminacy warning not shown (φπ ${phiPi}, ${indet})`)
+  }
+  if (!Number.isFinite(parseFloat(Y1indet))) throw new Error(`NK MSV path not drawn under indeterminacy (Y₁ ${Y1indet})`)
+  if (errors.length) throw new Error(`page errors: ${errors.join('; ')}`)
+
+  // switching to IS-MP-PC and back resumes each tab where it was left
   await page.getByRole('tab', { name: 'IS-MP-PC' }).click()
-  if (!page.url().includes('nu=2')) throw new Error('NK overwrote IS-MP-PC state')
+  await page.waitForFunction(() => location.search.includes('model=ismppc'))
+  if (!page.url().includes('nu=2')) throw new Error(`NK overwrote IS-MP-PC state: ${page.url()}`)
   await page.getByRole('tab', { name: '뉴케인지언' }).click()
-  if (!page.url().includes('phiPi=0.8')) throw new Error('NK state not resumed')
-  await page.goto(`${URL_}?model=nk&u=1&rhoU=0.5`)
-  await page.locator('[data-testid=trajectory]').waitFor()
-  await page.screenshot({ path: path.join(root, 'docs/screenshot-nk.png'), fullPage: true })
+  await page.waitForFunction(() => location.search.includes('model=nk'))
+  if (!page.url().includes('phiPi=0.8')) throw new Error(`NK state not resumed: ${page.url()}`)
   console.log('NK defaults, shocks, period curves, determinacy and tab state OK')
+
+  // screenshot: a persistent cost-push shock with the adjustment path
+  await page.goto(`${URL_}?model=nk&uShock=2&rhoU=0.7`)
+  await page.locator('[data-testid=trajectory]').waitFor()
+  await page.mouse.move(0, 0)
+  const nkOut = path.join(root, 'docs/screenshot-nk.png')
+  await page.screenshot({ path: nkOut, fullPage: true })
+  console.log(`screenshot: ${path.relative(root, nkOut)}`)
 
   // Check every model at all requested widths; keep review images out of Git.
   mkdirSync(path.join(root, 'test-results'), { recursive: true })
@@ -249,9 +290,9 @@ try {
   responsive.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   const cases = [
     ['islm', '?G=150'], ['adas', '?model=adas&M=1200'],
-    ['ismppc', '?model=ismppc&nu=2&nuMode=1&nuN=3'], ['nk', '?model=nk&u=1'],
+    ['ismppc', '?model=ismppc&nu=2&nuMode=1&nuN=3'], ['nk', '?model=nk&uShock=2&rhoU=0.7'],
     ['adas-rate', '?model=adas&regime=rate&G=130'], ['ismppc-unstable', '?model=ismppc&thPi=-1&dG=2'],
-    ['nk-indeterminate', '?model=nk&phiPi=0.8&phiX=0'], ['nk-boundary', '?model=nk&phiPi=1&phiX=0'],
+    ['nk-indeterminate', '?model=nk&phiPi=0.8&phiX=0&dRn=1'], ['nk-boundary', '?model=nk&phiPi=1&phiX=0&uShock=1'],
   ]
   for (const width of [1440, 1280, 1024, 390]) {
     await responsive.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
@@ -279,6 +320,8 @@ try {
           const b = label.getBBox()
           if (b.x < 74 || b.y < 14 || b.x + b.width > 496 || b.y + b.height > 336) issues.push('curve label outside plot')
         }
+        const labels = [...chart.querySelectorAll('.curve-label, .eq-label')].map((el) => el.getBBox())
+        if (labels.some((a, i) => labels.slice(i + 1).some((b) => overlaps(a, b)))) issues.push('curve/point labels overlap')
         if (chart.querySelector('[d*="NaN"], [cx="NaN"], [cy="NaN"]')) issues.push('NaN SVG coordinates')
         if (document.querySelector('.path-ref text')) issues.push('reference label inside plot')
         if (innerWidth > 760) {

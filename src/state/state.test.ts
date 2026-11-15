@@ -5,7 +5,7 @@ import { islmModel } from '../engine/islm'
 import { ismppcModel } from '../engine/ismppc'
 import { nkModel } from '../engine/nk'
 import type { ModelDefinition } from '../engine/types'
-import { clampTo, initialState, reducer, type ScenarioState } from './scenario'
+import { clampTo, initialState, reducer, requireModel, sharedKeys, type ScenarioState } from './scenario'
 import { parse, serialize } from './url'
 
 const valuesArb = (model: ModelDefinition) =>
@@ -30,9 +30,9 @@ describe('URL serialization', () => {
       expect(parse(serialize(s))).toEqual(s)
     }), { numRuns: 500 })
     expect(serialize(initialState('nk'))).toBe('model=nk')
-    const s = parse('?model=nk&d=2&rhoD=0.95&u=-1&v=1&phiPi=0.8&phiX=0&b.piStar=3')
-    expect(s.values).toMatchObject({ d: 2, rhoD: 0.95, u: -1, v: 1, phiPi: 0.8, phiX: 0 })
-    expect(s.baseline.values.piStar).toBe(3)
+    const s = parse('?model=nk&dRn=2&rhoRn=0.95&uShock=-1&vShock=1&phiPi=0.8&phiX=0&b.target=3')
+    expect(s.values).toMatchObject({ dRn: 2, rhoRn: 0.95, uShock: -1, vShock: 1, phiPi: 0.8, phiX: 0 })
+    expect(s.baseline.values.target).toBe(3)
     expect(parse(serialize(s))).toEqual(s)
   })
   it('default state serializes to an empty query', () => {
@@ -83,10 +83,11 @@ describe('URL serialization', () => {
 describe('reducer', () => {
   it('NK shares no values with any other model and resumes its remembered state', () => {
     for (const id of ['islm', 'adas', 'ismppc'] as const) {
+      expect(sharedKeys(nkModel, requireModel(id))).toEqual([])
       const other = reducer(initialState(id), { type: 'set', key: id === 'ismppc' ? 'piStar' : 'G', value: id === 'ismppc' ? 5 : 150 })
       expect(reducer(other, { type: 'model', model: 'nk' })).toEqual(initialState('nk'))
-      let nk = reducer(initialState('nk'), { type: 'set', key: 'piStar', value: 1 })
-      nk = reducer(nk, { type: 'set', key: 'u', value: 2 })
+      let nk = reducer(initialState('nk'), { type: 'set', key: 'target', value: 1 })
+      nk = reducer(nk, { type: 'set', key: 'uShock', value: 2 })
       expect(reducer(nk, { type: 'model', model: id })).toEqual(initialState(id))
       const back = reducer(nk, { type: 'model', model: id, remembered: other })
       expect(back).toEqual(other)
