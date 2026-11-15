@@ -30,6 +30,18 @@ export interface VariableSpec {
   description: string
   /** Decimal places used when displaying the value. */
   digits: number
+  /**
+   * Optional heading for a block of controls (e.g. "재정지출"). A new heading
+   * starts whenever the section differs from the previous variable's.
+   */
+  section?: string
+  /**
+   * When present the variable is a discrete choice rendered as buttons
+   * instead of a slider; `value`s must lie in [min, max] on the step grid.
+   */
+  choices?: { value: number; label: string }[]
+  /** Show the control only while another variable has the given value. */
+  visibleWhen?: { key: string; equals: number }
 }
 
 export interface RegimeSpec {
@@ -129,6 +141,25 @@ export interface Trajectory {
   curves: Curve[][]
   /** Graph ranges are fitted to points[0…fitUntil] (later points may leave the box). */
   fitUntil: number
+  /**
+   * When true, `curves[t]` replace the solid curves with the same id while
+   * period t is selected (both curves of the period move, e.g. DAD_t and
+   * DAS_t), instead of being drawn as an extra highlighted curve.
+   */
+  curvesFollowPeriod?: boolean
+}
+
+/** A short stability readout shown with the results (dynamic models). */
+export interface StabilityReadout {
+  /** e.g. "인플레이션 지속성 계수 c". */
+  label: string
+  /** Formatted value, e.g. "0.923". */
+  value: string
+  status: 'stable' | 'unit' | 'unstable'
+  /** One or two Korean sentences explaining the condition. */
+  text: string
+  /** Optional KaTeX formula of the condition. */
+  latex?: string
 }
 
 export interface Solution {
@@ -140,6 +171,7 @@ export interface Solution {
   /** When present, the graph draws these instead of the default E / E₀ pair. */
   markers?: Marker[]
   trajectory?: Trajectory
+  stability?: StabilityReadout
   warnings: Warning[]
 }
 

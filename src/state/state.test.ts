@@ -2,6 +2,7 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { adasModel } from '../engine/adas'
 import { islmModel } from '../engine/islm'
+import { ismppcModel } from '../engine/ismppc'
 import type { ModelDefinition } from '../engine/types'
 import { clampTo, initialState, reducer, type ScenarioState } from './scenario'
 import { parse, serialize } from './url'
@@ -13,12 +14,12 @@ const valuesArb = (model: ModelDefinition) =>
     ) as Record<string, fc.Arbitrary<number>>,
   )
 const regimeArb = fc.constantFrom('money', 'rate')
-const stateArbFor = (model: ModelDefinition): fc.Arbitrary<ScenarioState> =>
+const stateArbFor = (model: ModelDefinition, regimes: fc.Arbitrary<string> = regimeArb): fc.Arbitrary<ScenarioState> =>
   fc.record({
     model: fc.constant(model.id),
-    regime: regimeArb,
+    regime: regimes,
     values: valuesArb(model),
-    baseline: fc.record({ regime: regimeArb, values: valuesArb(model) }),
+    baseline: fc.record({ regime: regimes, values: valuesArb(model) }),
   })
 const stateArb = stateArbFor(islmModel)
 
@@ -42,6 +43,21 @@ describe('URL serialization', () => {
     }), { numRuns: 500 })
     expect(serialize(initialState('adas'))).toBe('model=adas')
     expect(parse('?model=adas').model).toBe('adas')
+  })
+
+  it('serialize → parse round-trips for IS-MP-PC (model id, shocks, persistence, rule, baseline)', () => {
+    fc.assert(fc.property(stateArbFor(ismppcModel, fc.constant('taylor')), (s) => {
+      const q = serialize(s)
+      expect(new URLSearchParams(q).get('model')).toBe('ismppc')
+      expect(parse(q)).toEqual(s)
+    }), { numRuns: 500 })
+    expect(serialize(initialState('ismppc'))).toBe('model=ismppc')
+    const q = '?model=ismppc&nu=1&nuMode=1&nuN=6&thPi=-0.5&lambda=0.25&piStar=1&b.piStar=3'
+    const s = parse(q)
+    expect(s.model).toBe('ismppc')
+    expect(s.values).toMatchObject({ nu: 1, nuMode: 1, nuN: 6, thPi: -0.5, lambda: 0.25, piStar: 1 })
+    expect(s.baseline.values.piStar).toBe(3)
+    expect(parse(serialize(s))).toEqual(s)
   })
 
   it('accepts a leading "?", ignores junk and clamps out-of-range values', () => {
@@ -74,7 +90,7 @@ describe('reducer', () => {
   it('ignores unknown variables and unimplemented models', () => {
     const s = initialState()
     expect(reducer(s, { type: 'set', key: 'nope', value: 1 })).toBe(s)
-    expect(reducer(s, { type: 'model', model: 'ismppc' })).toBe(s)
+    expect(reducer(s, { type: 'model', model: 'nk' })).toBe(s)
     expect(reducer(s, { type: 'model', model: 'islm' })).toBe(s)
   })
 

@@ -1,12 +1,13 @@
 import { adasModel } from './adas'
 import { islmModel } from './islm'
+import { ismppcModel } from './ismppc'
 import type { ModelDefinition, ModelEntry, ModelId } from './types'
 
 /** All model tabs in display order. Unimplemented models have `definition: null`. */
 export const MODELS: ModelEntry[] = [
   { id: 'islm', name: 'IS-LM', definition: islmModel },
   { id: 'adas', name: 'AD-AS', definition: adasModel },
-  { id: 'ismppc', name: 'IS-MP-PC', definition: null },
+  { id: 'ismppc', name: 'IS-MP-PC', definition: ismppcModel },
   { id: 'nk', name: '뉴케인지언', definition: null },
 ]
 
