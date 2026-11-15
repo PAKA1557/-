@@ -39,6 +39,26 @@ export function Slider({ spec, value, onChange }: Props) {
   )
 }
 
+/** A discrete choice (e.g. shock persistence) shown as a segmented button row. */
+export function ChoiceControl({ spec, value, onChange }: Props) {
+  const choices = spec.choices ?? []
+  return (
+    <fieldset className="control choice">
+      <legend className="choice-legend">
+        {spec.label} {spec.symbol && <span className="sym">{spec.symbol}</span>}
+      </legend>
+      <div className="segmented" style={{ gridTemplateColumns: `repeat(${choices.length}, 1fr)` }} data-testid={`choice-${spec.key}`}>
+        {choices.map((c) => (
+          <label key={c.value} className={c.value === value ? 'seg active' : 'seg'}>
+            <input type="radio" name={spec.key} value={c.value} checked={c.value === value} onChange={() => onChange(c.value)} />
+            {c.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 interface LockedProps {
   spec: VariableSpec
   value: number

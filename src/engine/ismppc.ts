@@ -657,7 +657,7 @@ export const ismppcModel: ModelDefinition = {
     { key: 'i1', label: '1기 명목금리', symbol: 'i₁', unit: '%', digits: 2 },
     { key: 'r1', label: '1기 실질금리', symbol: 'r₁', unit: '%', digits: 2 },
     { key: 'YLR', label: '장기 산출', symbol: 'Y*', digits: 2 },
-    { key: 'piLR', label: '장기 물가상승률', symbol: 'π^LR', unit: '%', digits: 2 },
+    { key: 'piLR', label: '장기 물가상승률', symbol: 'πᴸᴿ', unit: '%', digits: 2 },
   ],
   axes: {
     x: { key: 'Y', label: '산출 Y', digits: 2, defaultDomain: DEFAULT_X },

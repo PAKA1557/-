@@ -847,3 +847,86 @@ summary:focus-visible {
   border-left: 3px solid var(--border);
   padding-left: 8px;
 }
+
+/* ---------- control sections, choices, stability (IS-MP-PC) ---------- */
+.control-section {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 2px solid var(--border);
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.control-section + .control {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.control.choice {
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.choice-legend {
+  font-size: 0.85rem;
+  padding: 0;
+  margin-bottom: 6px;
+  color: var(--text-2);
+}
+
+.control.choice .seg {
+  font-size: 0.8rem;
+  padding: 6px 2px;
+}
+
+.stability {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--up);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.stability.unstable,
+.stability.unit {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.stability-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.stability-head strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stability-badge {
+  font-weight: 700;
+  color: var(--up);
+}
+
+.stability.unstable .stability-badge,
+.stability.unit .stability-badge {
+  color: var(--warn);
+}
+
+.stability p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+
+.stability .tex-display {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}

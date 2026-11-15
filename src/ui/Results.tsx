@@ -1,5 +1,24 @@
 import { fmt } from '../engine'
-import type { ModelDefinition, Solution } from '../engine/types'
+import type { ModelDefinition, Solution, StabilityReadout } from '../engine/types'
+import { Tex } from './Tex'
+
+const STATUS_LABEL: Record<StabilityReadout['status'], string> = { stable: '안정', unit: '수렴하지 않음', unstable: '불안정' }
+
+function Stability({ s }: { s: StabilityReadout }) {
+  return (
+    <div className={`stability ${s.status}`} data-testid="stability">
+      <div className="stability-head">
+        <span>{s.label}</span>
+        <strong data-testid="stability-value">{s.value}</strong>
+        <span className="stability-badge" data-testid="stability-status">
+          {STATUS_LABEL[s.status]}
+        </span>
+      </div>
+      {s.latex && <Tex latex={s.latex} display />}
+      <p>{s.text}</p>
+    </div>
+  )
+}
 
 interface Props {
   model: ModelDefinition
@@ -35,6 +54,7 @@ export function Results({ model, regime, current, baseline }: Props) {
           )
         })}
       </dl>
+      {current.stability && <Stability s={current.stability} />}
       {current.warnings.length > 0 && (
         <ul className="warnings" role="status">
           {current.warnings.map((w) => (

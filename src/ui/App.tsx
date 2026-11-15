@@ -37,7 +37,7 @@ function graphPoints(s: Solution): Point[] {
 }
 
 export default function App() {
-  const [state, dispatch] = useScenario()
+  const [state, dispatch, selectModel] = useScenario()
   const [toast, setToast] = useState<string | null>(null)
   const model = requireModel(state.model)
 
@@ -87,7 +87,7 @@ export default function App() {
           <h1>거시경제 정책 시뮬레이터</h1>
           <p>정책 변수를 움직여 균형이 어떻게 바뀌는지 살펴보세요.</p>
         </div>
-        <ModelTabs active={state.model} onSelect={(m) => dispatch({ type: 'model', model: m })} />
+        <ModelTabs active={state.model} onSelect={selectModel} />
         <div className="actions">
           <button type="button" className="btn" onClick={share}>
             링크 공유

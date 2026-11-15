@@ -62,13 +62,18 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
     .x((p) => x(p.x))
     .y((p) => y(p.y))
   const yDigits = axes.y.digits ?? 2
+  const xDigits = axes.x.digits ?? 0
   const yUnit = axes.y.unit ?? ''
 
   const traj = current.trajectory
   const tSel = traj && period !== undefined ? Math.min(Math.max(0, Math.round(period)), traj.points.length - 1) : null
   const selPoint = traj && tSel !== null ? traj.points[tSel] : null
+  const follow = Boolean(traj?.curvesFollowPeriod)
   // SRAS (or similar) of the selected period, unless it is already the solid current curve.
-  const selCurves = traj && tSel !== null && tSel !== 1 ? traj.curves[tSel] ?? [] : []
+  const selCurves = traj && !follow && tSel !== null && tSel !== 1 ? traj.curves[tSel] ?? [] : []
+  // Models whose curves all move each period: the selected period's curves replace the solid ones.
+  const periodCurves = traj && follow && tSel !== null ? traj.curves[tSel] ?? [] : []
+  const shown = current.curves.map((c) => periodCurves.find((d) => d.id === c.id) ?? c)
 
   const e = current.equilibrium.point
   const e0 = baseline.equilibrium.point
@@ -131,7 +136,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         viewBox={`0 0 ${W} ${H}`}
         className="chart"
         role="img"
-        aria-label={`${title} 그래프. ${markers ? '단기 ' : ''}균형 ${axes.x.key} = ${fmt(ariaPoint.x, 0)}, ${axes.y.key} = ${fmt(ariaPoint.y, yDigits)}${yUnit}.`}
+        aria-label={`${title} 그래프. ${markers ? '단기 ' : ''}균형 ${axes.x.key} = ${fmt(ariaPoint.x, xDigits)}, ${axes.y.key} = ${fmt(ariaPoint.y, yDigits)}${yUnit}.`}
       >
         <defs>
           <clipPath id={clipId}>
@@ -154,7 +159,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
           <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} />
           {x.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(x(t) - x(tagPoint.x)) > 50).map((t) => (
             <text key={`x${t}`} x={x(t)} y={H - M.b + 18} textAnchor="middle">
-              {fmt(t, 0)}
+              {fmt(t, Number.isInteger(t) ? 0 : 1)}
             </text>
           ))}
           {y.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(y(t) - y(tagPoint.y)) > 18).map((t) => (
@@ -176,8 +181,8 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
             baseline.curves.map((c, idx) => (
               <path key={`g${c.id}`} d={path(c.points) ?? ''} className={`curve ghost ${curveClass(c, idx)}`} />
             ))}
-          {current.curves.map((c, idx) => (
-            <path key={c.id} d={path(c.points) ?? ''} className={`curve ${curveClass(c, idx)}`} />
+          {shown.map((c, idx) => (
+            <path key={c.id} d={path(c.points) ?? ''} className={`curve ${curveClass(c, idx)}`} data-testid={`curve-${c.id}`} />
           ))}
           {selCurves.map((c) => (
             <path key={`sel${c.id}`} d={path(c.points) ?? ''} className="curve curve-sel" />
@@ -221,7 +226,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
           {hoverX !== null && (
             <g className="crosshair">
               <line x1={x(hoverX)} x2={x(hoverX)} y1={M.t} y2={H - M.b} />
-              {current.curves.map((c, idx) => {
+              {shown.map((c, idx) => {
                 const v = curveAt(c, hoverX)
                 return v === null || v < yDomain[0] || v > yDomain[1] ? null : (
                   <circle key={c.id} cx={x(hoverX)} cy={y(v)} r={4} className={`hover-dot ${curveClass(c, idx)}`} />
@@ -257,7 +262,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
           )}
 
         {/* direct curve labels, outside the clip so they never get cut */}
-        {[...current.curves, ...selCurves].map((c) => {
+        {[...shown, ...selCurves].map((c) => {
           const a = labelAnchor(c, xDomain, yDomain)
           const vertical = c.points.length > 1 && c.points[0].x === c.points[c.points.length - 1].x
           return a ? (
@@ -272,7 +277,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
           <g className="value-tag">
             <rect x={x(tagPoint.x) - 32} y={H - M.b + 3} width={64} height={20} rx={4} />
             <text x={x(tagPoint.x)} y={H - M.b + 17} textAnchor="middle">
-              {fmt(tagPoint.x, 0)}
+              {fmt(tagPoint.x, xDigits)}
             </text>
             <rect x={M.l - 54} y={y(tagPoint.y) - 10} width={52} height={20} rx={4} />
             <text x={M.l - 28} y={y(tagPoint.y) + 4} textAnchor="middle">
@@ -293,8 +298,8 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
       </svg>
       {hoverX !== null && (
         <p className="tooltip-line" aria-live="polite">
-          {axes.x.key} = {fmt(hoverX, 0)}:{' '}
-          {current.curves
+          {axes.x.key} = {fmt(hoverX, xDigits)}:{' '}
+          {shown
             .map((c) => {
               const v = curveAt(c, hoverX)
               return v === null ? null : `${c.label}의 ${axes.y.key} = ${fmt(v, yDigits)}${yUnit}`
