@@ -1,7 +1,9 @@
 // Smoke test: serve the production build with `vite preview`, load the page
 // in Chromium, move the G slider and check that the displayed Y changes; then
-// open the AD-AS tab, move M and check the short-/long-run numbers.
-// Writes docs/screenshot-islm.png and docs/screenshot-adas.png.
+// open the AD-AS tab, move M and check the short-/long-run numbers; then
+// open the IS-MP-PC tab, apply a supply shock and make the Taylor rule
+// violate the Taylor principle.
+// Writes docs/screenshot-islm.png, docs/screenshot-adas.png and docs/screenshot-ismppc.png.
 // Run `npm run build` first.
 //
 // Uses an installed `playwright` package (local or global); it does not
@@ -141,10 +143,71 @@ try {
   await page.screenshot({ path: adOut, fullPage: true })
   console.log(`screenshot: ${path.relative(root, adOut)}`)
 
+  // ---- IS-MP-PC ----
+  await page.getByRole('tab', { name: 'IS-MP-PC' }).click()
+  await page.waitForFunction(() => location.search === '?model=ismppc')
+  const pcBefore = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`IS-MP-PC before: ${JSON.stringify(pcBefore)}`)
+  if (pcBefore.Y1 !== '100.00' || pcBefore.pi1 !== '2.00%' || pcBefore.i1 !== '4.00%' || pcBefore.r1 !== '2.00%') {
+    throw new Error(`unexpected IS-MP-PC steady state ${JSON.stringify(pcBefore)}`)
+  }
+  if (!(await page.getByTestId('locked-Mend').isVisible())) throw new Error('money supply is not shown as a locked outcome')
+  const nuSlider = page.locator('input[type=range][name=nu]')
+  await nuSlider.focus()
+  for (let n = 0; n < 4; n++) await page.keyboard.press('ArrowRight')
+  const nu = await read('input-nu')
+  const pcAfter = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`IS-MP-PC after ν ${nu}: ${JSON.stringify(pcAfter)}`)
+  if (nu !== '1.00%p') throw new Error(`expected ν 1.00%p, got ${nu}`)
+  if (pcAfter.Y1 === pcBefore.Y1 || pcAfter.pi1 === pcBefore.pi1) throw new Error('IS-MP-PC numbers did not change after a supply shock')
+  if (!(parseFloat(pcAfter.pi1) > 2 && parseFloat(pcAfter.Y1) < 100)) throw new Error(`supply shock is not stagflationary: ${JSON.stringify(pcAfter)}`)
+  if (!page.url().includes('model=ismppc') || !page.url().includes('nu=1')) throw new Error(`URL not updated: ${page.url()}`)
+  const pcText = await page.getByTestId('explanation').textContent()
+  if (!pcText?.includes('스태그플레이션')) throw new Error('IS-MP-PC explanation does not mention stagflation')
+  const pcDots = await page.locator('[data-testid=trajectory] circle').count()
+  if (pcDots !== 41) throw new Error(`expected 41 IS-MP-PC path dots, got ${pcDots}`)
+  const stable = await read('stability-status')
+  console.log(`stability: c = ${await read('stability-value')} (${stable}), dots ${pcDots}`)
+  if (stable !== '안정') throw new Error(`expected a stable rule at defaults, got ${stable}`)
+  // the selected period's DAS moves with expected inflation
+  const das1 = await page.getByTestId('curve-DAS').getAttribute('d')
+  await scrub.fill('3')
+  const das3 = await page.getByTestId('curve-DAS').getAttribute('d')
+  if (das1 === das3) throw new Error('DAS did not follow the selected period')
+  await scrub.fill('1')
+
+  // Taylor principle violated: θπ < 0 → instability warning, no crash
+  await page.locator('input[type=range][name=thPi]').fill('-0.5')
+  const thPi = await read('input-thPi')
+  const unstable = await read('stability-status')
+  const pcWarn = await page.locator('.warnings').textContent()
+  console.log(`θπ ${thPi}: c = ${await read('stability-value')} (${unstable})`)
+  if (thPi !== '-0.5' || unstable !== '불안정' || !pcWarn?.includes('불안정') || !pcWarn.includes('테일러 원칙')) {
+    throw new Error(`instability warning not shown (θπ ${thPi}, ${unstable})`)
+  }
+  if (errors.length) throw new Error(`page errors: ${errors.join('; ')}`)
+
+  // switching to AD-AS and back resumes each tab where it was left
+  await page.getByRole('tab', { name: 'AD-AS' }).click()
+  await page.waitForFunction(() => location.search.includes('model=adas'))
+  if (!page.url().includes('M=1200')) throw new Error(`AD-AS state not resumed after visiting IS-MP-PC: ${page.url()}`)
+  await page.getByRole('tab', { name: 'IS-MP-PC' }).click()
+  await page.waitForFunction(() => location.search.includes('model=ismppc'))
+  if (!page.url().includes('thPi=-0.5')) throw new Error(`IS-MP-PC state not resumed: ${page.url()}`)
+  console.log('tab switch resumes both models')
+
+  // screenshot: a 3-year cost-push shock with the adjustment path
+  await page.goto(`${URL_}?model=ismppc&nu=2&nuMode=1&nuN=3`)
+  await page.locator('[data-testid=trajectory]').waitFor()
+  await page.mouse.move(0, 0)
+  const pcOut = path.join(root, 'docs/screenshot-ismppc.png')
+  await page.screenshot({ path: pcOut, fullPage: true })
+  console.log(`screenshot: ${path.relative(root, pcOut)}`)
+
   // Phone width: panels must stack without horizontal scroll.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
   phone.on('pageerror', (e) => errors.push(String(e)))
-  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130']) {
+  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2']) {
     await phone.goto(URL_ + q)
     const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     console.log(`phone horizontal overflow ${q || '(IS-LM)'}: ${overflow}px`)
