@@ -152,12 +152,12 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         <g className="axis">
           <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} />
           <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} />
-          {x.ticks(6).map((t) => (
+          {x.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(x(t) - x(tagPoint.x)) > 50).map((t) => (
             <text key={`x${t}`} x={x(t)} y={H - M.b + 18} textAnchor="middle">
               {fmt(t, 0)}
             </text>
           ))}
-          {y.ticks(6).map((t) => (
+          {y.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(y(t) - y(tagPoint.y)) > 18).map((t) => (
             <text key={`y${t}`} x={M.l - 8} y={y(t) + 4} textAnchor="end">
               {fmt(t, Number.isInteger(t) ? 0 : 1)}
             </text>
