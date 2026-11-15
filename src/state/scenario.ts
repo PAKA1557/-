@@ -70,6 +70,27 @@ function switchRegime(state: ScenarioState, regime: string): ScenarioState {
   return { ...state, regime, values }
 }
 
+/**
+ * Carry a snapshot into another model: variables that exist in both models
+ * (G, M, i, πe, shared parameters) keep their values, clamped to the new
+ * ranges; the regime is kept when the new model has it.
+ */
+export function carrySnapshot(snap: Snapshot, to: ModelDefinition): Snapshot {
+  const values = defaultValues(to)
+  for (const v of to.variables) {
+    const x = snap.values[v.key]
+    if (typeof x === 'number' && Number.isFinite(x)) values[v.key] = clampTo(v, x)
+  }
+  const regime = to.regimes.some((r) => r.id === snap.regime) ? snap.regime : to.defaultRegime
+  return { regime, values }
+}
+
+function switchModel(state: ScenarioState, id: ModelId): ScenarioState {
+  const to = getModel(id)
+  if (!to || id === state.model) return state
+  return { model: to.id, ...carrySnapshot(state, to), baseline: carrySnapshot(state.baseline, to) }
+}
+
 export function reducer(state: ScenarioState, action: Action): ScenarioState {
   switch (action.type) {
     case 'set': {
@@ -84,7 +105,7 @@ export function reducer(state: ScenarioState, action: Action): ScenarioState {
     case 'reset':
       return initialState(state.model)
     case 'model':
-      return getModel(action.model) && action.model !== state.model ? initialState(action.model) : state
+      return switchModel(state, action.model)
     case 'load':
       return action.state
   }
