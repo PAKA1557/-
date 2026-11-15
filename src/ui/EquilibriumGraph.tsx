@@ -47,10 +47,29 @@ function curveAt(c: Curve, x: number): number | null {
 }
 
 /** Label offsets so E₀ / E₁ / E* do not collide (E₀ and E* share the LRAS). */
-const MARKER_OFFSET: Record<Marker['kind'], { dx: number; dy: number; anchor: 'start' | 'end' }> = {
-  baseline: { dx: -9, dy: 16, anchor: 'end' },
-  short: { dx: 9, dy: -9, anchor: 'start' },
-  long: { dx: -9, dy: -8, anchor: 'end' },
+const MARKER_OFFSET: Record<Marker['kind'], [number, number]> = {
+  baseline: [-1, 1], short: [1, -1], long: [-1, -1],
+}
+
+type LabelBox = { left: number; top: number; width: number; height: number }
+const overlap = (a: LabelBox, b: LabelBox) => a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/** Segment/rectangle clipping, used to keep labels clear of plotted curves. */
+function crosses(a: Point, b: Point, box: LabelBox): boolean {
+  let lo = 0
+  let hi = 1
+  for (const [start, delta, min, max] of [
+    [a.x, b.x - a.x, box.left, box.left + box.width],
+    [a.y, b.y - a.y, box.top, box.top + box.height],
+  ]) {
+    if (delta === 0) { if (start < min || start > max) return false; continue }
+    const t1 = (min - start) / delta
+    const t2 = (max - start) / delta
+    lo = Math.max(lo, Math.min(t1, t2))
+    hi = Math.min(hi, Math.max(t1, t2))
+  }
+  return lo <= hi
 }
 
 export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, baseline, showGhost, onSaveBaseline, period, footer }: Props) {
@@ -59,6 +78,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
   const x = scaleLinear().domain(xDomain).range([M.l, W - M.r])
   const y = scaleLinear().domain(yDomain).range([H - M.b, M.t])
   const path = line<Point>()
+    .defined((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
     .x((p) => x(p.x))
     .y((p) => y(p.y))
   const yDigits = axes.y.digits ?? 2
@@ -81,6 +101,10 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
   const inBox = (p: Point) => p.x >= xDomain[0] && p.x <= xDomain[1] && p.y >= yDomain[0] && p.y <= yDomain[1]
   const moved = Math.hypot(x(e.x) - x(e0.x), y(e.y) - y(e0.y)) > 4
   const zeroLine = yDomain[0] < 0 && yDomain[1] > 0
+  const xTag = fmt(tagPoint.x, xDigits)
+  const xTagWidth = Math.max(64, xTag.length * 10 + 16)
+  const xTagCenter = clamp(x(tagPoint.x), M.l + xTagWidth / 2, W - M.r - xTagWidth / 2)
+  const yTag = fmt(tagPoint.y, yDigits)
 
   const onMove = (ev: PointerEvent<SVGRectElement>) => {
     const svg = ev.currentTarget.ownerSVGElement
@@ -108,6 +132,29 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
 
   const markers = current.markers
   const ariaPoint = markers?.find((m) => m.kind === 'short')?.point ?? e
+  const labelMarkers: Marker[] = markers ?? [
+    { point: e, label: 'E', kind: 'short' },
+    ...(showGhost && moved ? [{ point: e0, label: 'E₀', kind: 'baseline' as const }] : []),
+  ]
+  const occupied: LabelBox[] = []
+  const segments = shown.flatMap((c) => c.points.slice(1).map((b, j) => [
+    { x: x(c.points[j].x), y: y(c.points[j].y) }, { x: x(b.x), y: y(b.y) },
+  ] as const))
+  const markerLabels = labelMarkers.filter((m) => inBox(m.point)).map((m) => {
+    const width = Math.max(28, m.label.length * 12)
+    const [sx, sy] = MARKER_OFFSET[m.kind]
+    const candidates = [14, 28, 44].flatMap((gap) => [[sx, sy], [-sx, sy], [sx, -sy], [-sx, -sy]].map(([dx, dy]) => ({
+      left: clamp(x(m.point.x) + (dx > 0 ? gap : -gap - width), M.l + 8, W - M.r - width - 8),
+      top: clamp(y(m.point.y) + (dy > 0 ? gap : -gap - 20), M.t + 6, H - M.b - 26),
+      width, height: 20,
+    })))
+    const score = (box: LabelBox) => occupied.filter((b) => overlap(box, b)).length * 1000
+      + labelMarkers.filter((q) => overlap(box, { left: x(q.point.x) - 9, top: y(q.point.y) - 9, width: 18, height: 18 })).length * 200
+      + segments.filter(([a, b]) => crosses(a, b, box)).length * 100
+    const box = candidates.reduce((best, b) => score(b) < score(best) ? b : best)
+    occupied.push(box)
+    return { m, box }
+  })
 
   return (
     <section className="panel graph" aria-labelledby="graph-title">
@@ -157,12 +204,12 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         <g className="axis">
           <line x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} />
           <line x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} />
-          {x.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(x(t) - x(tagPoint.x)) > 50).map((t) => (
+          {x.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(x(t) - xTagCenter) > xTagWidth / 2 + fmt(t, Number.isInteger(t) ? 0 : 1).length * 5 + 6).map((t) => (
             <text key={`x${t}`} x={x(t)} y={H - M.b + 18} textAnchor="middle">
               {fmt(t, Number.isInteger(t) ? 0 : 1)}
             </text>
           ))}
-          {y.ticks(6).filter((t) => !inBox(tagPoint) || Math.abs(y(t) - y(tagPoint.y)) > 18).map((t) => (
+          {y.ticks(6).filter((t) => y(t) < H - M.b - 12 && (!inBox(tagPoint) || Math.abs(y(t) - y(tagPoint.y)) > 23)).map((t) => (
             <text key={`y${t}`} x={M.l - 8} y={y(t) + 4} textAnchor="end">
               {fmt(t, Number.isInteger(t) ? 0 : 1)}
             </text>
@@ -202,14 +249,14 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
                 <line key={j} x1={x(a.x)} y1={y(a.y)} {...shorten(a, b, 5)} markerEnd={`url(#${clipId}-arrow)`} />
               ))}
               <path d={path(traj.points) ?? ''} className="traj-line" />
-              {traj.points.map((p, t) => (
+              {traj.points.map((p, t) => Number.isFinite(p.x) && Number.isFinite(p.y) && (
                 <circle key={t} className="traj-dot" cx={x(p.x)} cy={y(p.y)} r={2.2} />
               ))}
             </g>
           )}
 
           {markers ? (
-            markers.map((m) => (
+            markers.filter((m) => inBox(m.point)).map((m) => (
               <circle key={m.label} className={m.kind === 'baseline' && markers.length > 1 ? 'eq ghost-eq' : 'eq'} cx={x(m.point.x)} cy={y(m.point.y)} r={m.kind === 'short' ? 6 : 5} />
             ))
           ) : (
@@ -237,36 +284,19 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         </g>
 
         {/* point labels */}
-        {markers
-          ? markers.filter((m) => inBox(m.point)).map((m) => {
-              const o = MARKER_OFFSET[m.kind]
-              return (
-                <text key={`t${m.label}`} className={`eq-label${m.kind === 'baseline' && markers.length > 1 ? ' ghost-label' : ''}`} x={x(m.point.x) + o.dx} y={y(m.point.y) + o.dy} textAnchor={o.anchor}>
-                  {m.label}
-                </text>
-              )
-            })
-          : (
-            <>
-              {inBox(e) && (
-                <text className="eq-label" x={x(e.x) + 9} y={y(e.y) - 9}>
-                  E
-                </text>
-              )}
-              {showGhost && moved && inBox(e0) && (
-                <text className="eq-label ghost-label" x={x(e0.x) - 9} y={y(e0.y) + 16} textAnchor="end">
-                  E₀
-                </text>
-              )}
-            </>
-          )}
+        {markerLabels.map(({ m, box }) => (
+          <g key={`t${m.label}`}>
+            <line className="label-leader" x1={x(m.point.x)} y1={y(m.point.y)} x2={box.left + box.width / 2} y2={box.top + 10} />
+            <text className={`eq-label${m.kind === 'baseline' && labelMarkers.length > 1 ? ' ghost-label' : ''}`} x={box.left + box.width / 2} y={box.top + 16} textAnchor="middle">{m.label}</text>
+          </g>
+        ))}
 
         {/* direct curve labels, outside the clip so they never get cut */}
         {[...shown, ...selCurves].map((c) => {
           const a = labelAnchor(c, xDomain, yDomain)
           const vertical = c.points.length > 1 && c.points[0].x === c.points[c.points.length - 1].x
           return a ? (
-            <text key={`l${c.id}`} className={`curve-label${selCurves.includes(c) ? ' sel-label' : ''}`} x={x(a.x) + 6} y={vertical ? y(a.y) + 12 : y(a.y) + 4}>
+            <text key={`l${c.id}`} className={`curve-label${selCurves.includes(c) ? ' sel-label' : ''}`} textAnchor="end" x={clamp(x(a.x) - 8, M.l + Math.max(50, c.label.length * 18), W - M.r - 10)} y={clamp(y(a.y) + (vertical ? 20 : -12), M.t + 22, H - M.b - 16)}>
               {c.label}
             </text>
           ) : null
@@ -275,13 +305,13 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
         {/* value labels on the axes */}
         {inBox(tagPoint) && (
           <g className="value-tag">
-            <rect x={x(tagPoint.x) - 32} y={H - M.b + 3} width={64} height={20} rx={4} />
-            <text x={x(tagPoint.x)} y={H - M.b + 17} textAnchor="middle">
-              {fmt(tagPoint.x, xDigits)}
+            <rect x={xTagCenter - xTagWidth / 2} y={H - M.b + 2} width={xTagWidth} height={24} rx={4} />
+            <text x={xTagCenter} y={H - M.b + 19} textAnchor="middle">
+              {xTag}
             </text>
             <rect x={M.l - 54} y={y(tagPoint.y) - 10} width={52} height={20} rx={4} />
             <text x={M.l - 28} y={y(tagPoint.y) + 4} textAnchor="middle">
-              {fmt(tagPoint.y, yDigits)}
+              {yTag}
             </text>
           </g>
         )}
@@ -308,7 +338,7 @@ export function EquilibriumGraph({ title, axes, xDomain, yDomain, current, basel
             .join(' · ')}
         </p>
       )}
-      {!inBox(e) && <p className="warn">균형점이 그래프 범위를 벗어났습니다.</p>}
+      {!inBox(e) && <p className="warn">{Number.isFinite(e.x) && Number.isFinite(e.y) ? '균형점이 그래프 범위를 벗어났습니다.' : '현재 조건에서는 유일한 균형 경로를 표시할 수 없습니다.'}</p>}
       {traj && traj.points.some((p) => !inBox(p)) && inBox(e) && (
         <p className="hint">조정 경로의 일부가 그래프 범위를 벗어납니다. 아래 시간 경로에서 전체 기간을 볼 수 있습니다.</p>
       )}

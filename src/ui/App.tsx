@@ -104,6 +104,7 @@ export default function App() {
       )}
       <main className="layout">
         <ControlPanel
+          key={model.id}
           model={model}
           regime={state.regime}
           values={state.values}
@@ -138,8 +139,8 @@ export default function App() {
             }
           />
           <Results model={model} regime={state.regime} current={view.current} baseline={view.baseline} />
+          <TimePathPanel paths={view.current.timePaths ?? []} note={model.timePathNote} period={period} />
         </div>
-        <TimePathPanel paths={view.current.timePaths ?? []} note={model.timePathNote} period={period} />
         <ExplanationPanel model={model} sentences={view.sentences} />
       </main>
     </div>

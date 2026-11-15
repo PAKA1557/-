@@ -62,8 +62,8 @@ function DynamicChart({ path, period }: { path: TimePath; period: number }) {
   const finite = vals.filter(Number.isFinite)
   const ref = path.reference && Number.isFinite(path.reference.value) ? path.reference : undefined
   const all = ref ? [...finite, ref.value] : finite
-  const lo = Math.min(...all)
-  const hi = Math.max(...all)
+  const lo = all.length ? Math.min(...all) : 0
+  const hi = all.length ? Math.max(...all) : 1
   const pad = Math.max((hi - lo) * 0.15, Math.abs(hi) * 0.005, 10 ** -path.digits)
   const x = scaleLinear().domain([0, n]).range([DM.l, DW - DM.r])
   const y = scaleLinear().domain([lo - pad, hi + pad]).range([DH - DM.b, DM.t])
@@ -82,6 +82,7 @@ function DynamicChart({ path, period }: { path: TimePath; period: number }) {
           {t}기: {Number.isFinite(v) ? `${fmt(v, path.digits)}${unit}` : '—'}
         </span>
       </figcaption>
+      {ref && <p className="path-reference"><i className="swatch curve-ref ghost-swatch" /> {ref.label} {fmt(ref.value, path.digits)}{unit}</p>}
       <svg
         viewBox={`0 0 ${DW} ${DH}`}
         role="img"
@@ -90,9 +91,6 @@ function DynamicChart({ path, period }: { path: TimePath; period: number }) {
         {ref && (
           <g className="path-ref">
             <line x1={DM.l} x2={DW - DM.r} y1={y(ref.value)} y2={y(ref.value)} />
-            <text x={DW - DM.r} y={y(ref.value) - 3} textAnchor="end">
-              {ref.label} {fmt(ref.value, path.digits)}
-            </text>
           </g>
         )}
         <line className="path-divider" x1={x(t)} x2={x(t)} y1={DM.t - 4} y2={DH - DM.b} />
@@ -119,7 +117,9 @@ export function TimePathPanel({ paths, note, period }: PanelProps) {
     <section className="panel timepaths" aria-labelledby="paths-title">
       <h2 id="paths-title">시간 경로</h2>
       {note && <p className="hint">{note}</p>}
-      {paths.map((p) => (p.kind === 'dynamic' ? <DynamicChart key={p.key} path={p} period={period} /> : <StepChart key={p.key} path={p} />))}
+      <div className="path-grid">
+        {paths.map((p) => (p.kind === 'dynamic' ? <DynamicChart key={p.key} path={p} period={period} /> : <StepChart key={p.key} path={p} />))}
+      </div>
     </section>
   )
 }

@@ -7,14 +7,20 @@ interface Props {
   onChange: (value: number) => void
 }
 
+function Help({ label, text }: { label: string; text: string }) {
+  if (!text) return null
+  return <details className="control-help"><summary aria-label={`${label} 설명`}>ⓘ</summary><p>{text}</p></details>
+}
+
 export function Slider({ spec, value, onChange }: Props) {
   const id = `var-${spec.key}`
   return (
     <div className="control">
       <div className="control-head">
-        <label htmlFor={id}>
-          {spec.label} <span className="sym">{spec.symbol}</span>
-        </label>
+        <span className="control-label">
+          <label htmlFor={id}>{spec.label} <span className="sym">{spec.symbol}</span></label>
+          <Help label={spec.label} text={spec.description} />
+        </span>
         <output htmlFor={id} className="control-value" data-testid={`input-${spec.key}`}>
           {fmt(value, spec.digits)}
           {spec.unit}
@@ -34,7 +40,6 @@ export function Slider({ spec, value, onChange }: Props) {
         <span>{fmt(spec.min, spec.digits)}</span>
         <span>{fmt(spec.max, spec.digits)}</span>
       </div>
-      <p className="hint">{spec.description}</p>
     </div>
   )
 }
@@ -43,10 +48,10 @@ export function Slider({ spec, value, onChange }: Props) {
 export function ChoiceControl({ spec, value, onChange }: Props) {
   const choices = spec.choices ?? []
   return (
-    <fieldset className="control choice">
-      <legend className="choice-legend">
+    <div className="control choice" role="group" aria-label={spec.label}>
+      <span className="choice-legend">
         {spec.label} {spec.symbol && <span className="sym">{spec.symbol}</span>}
-      </legend>
+      </span>
       <div className="segmented" style={{ gridTemplateColumns: `repeat(${choices.length}, 1fr)` }} data-testid={`choice-${spec.key}`}>
         {choices.map((c) => (
           <label key={c.value} className={c.value === value ? 'seg active' : 'seg'}>
@@ -55,7 +60,7 @@ export function ChoiceControl({ spec, value, onChange }: Props) {
           </label>
         ))}
       </div>
-    </fieldset>
+    </div>
   )
 }
 

@@ -59,7 +59,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 })
   const errors = []
   page.on('pageerror', (e) => errors.push(String(e)))
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   await page.goto(URL_)
+  const reveal = async (control) => {
+    const section = page.locator('details.control-section').filter({ has: control })
+    if (await section.count() && !(await section.evaluate((el) => el.open))) await section.locator(':scope > summary').click()
+  }
 
   const y = page.getByTestId('out-Y')
   const before = (await y.textContent())?.trim()
@@ -152,8 +157,10 @@ try {
   if (pcBefore.Y1 !== '100.00' || pcBefore.pi1 !== '2.00%' || pcBefore.i1 !== '4.00%' || pcBefore.r1 !== '2.00%') {
     throw new Error(`unexpected IS-MP-PC steady state ${JSON.stringify(pcBefore)}`)
   }
+  await reveal(page.getByTestId('locked-Mend'))
   if (!(await page.getByTestId('locked-Mend').isVisible())) throw new Error('money supply is not shown as a locked outcome')
   const nuSlider = page.locator('input[type=range][name=nu]')
+  await reveal(nuSlider)
   await nuSlider.focus()
   for (let n = 0; n < 4; n++) await page.keyboard.press('ArrowRight')
   const nu = await read('input-nu')
@@ -178,6 +185,7 @@ try {
   await scrub.fill('1')
 
   // Taylor principle violated: θπ < 0 → instability warning, no crash
+  await reveal(page.locator('input[type=range][name=thPi]'))
   await page.locator('input[type=range][name=thPi]').fill('-0.5')
   const thPi = await read('input-thPi')
   const unstable = await read('stability-status')
@@ -212,6 +220,7 @@ try {
     if (await read(`out-${key}`) !== expected) throw new Error(`unexpected NK default ${key}`)
   }
   if (await read('stability-value') !== '0.170') throw new Error('unexpected NK determinacy condition')
+  await reveal(page.locator('input[type=range][name=u]'))
   await page.locator('input[type=range][name=u]').fill('1')
   if (!(parseFloat(await read('out-Y1')) < 100 && parseFloat(await read('out-pi1')) > 2)) throw new Error('NK cost shock signs incorrect')
   const nkpc1 = await page.getByTestId('curve-NKPC').getAttribute('d')
@@ -222,7 +231,7 @@ try {
   if (await read('path-pi') !== '2기: 2.00%') throw new Error('NK did not return in period 2 at rho = 0')
   await page.locator('input[type=range][name=phiPi]').fill('0.8')
   await page.locator('input[type=range][name=phiX]').fill('0')
-  if (await read('stability-status') !== '불안정' || !(await page.locator('.warnings').textContent()).includes('유일한 균형이 없음')) throw new Error('NK indeterminacy warning absent')
+  if (await read('stability-status') !== '비결정적' || !(await page.locator('.warnings').textContent()).includes('유일한 균형이 없음')) throw new Error('NK indeterminacy warning absent')
   if (await read('out-Y1') !== '—') throw new Error('NK reports an indeterminate equilibrium')
   await page.getByRole('tab', { name: 'IS-MP-PC' }).click()
   if (!page.url().includes('nu=2')) throw new Error('NK overwrote IS-MP-PC state')
@@ -233,14 +242,55 @@ try {
   await page.screenshot({ path: path.join(root, 'docs/screenshot-nk.png'), fullPage: true })
   console.log('NK defaults, shocks, period curves, determinacy and tab state OK')
 
-  // Phone width: panels must stack without horizontal scroll.
-  const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
-  phone.on('pageerror', (e) => errors.push(String(e)))
-  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2', '?model=nk&u=1', '?model=nk&phiPi=0.8&phiX=0']) {
-    await phone.goto(URL_ + q)
-    const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
-    console.log(`phone horizontal overflow ${q || '(IS-LM)'}: ${overflow}px`)
-    if (overflow > 0) throw new Error(`horizontal scroll at phone width for ${q || 'IS-LM'}`)
+  // Check every model at all requested widths; keep review images out of Git.
+  mkdirSync(path.join(root, 'test-results'), { recursive: true })
+  const responsive = await browser.newPage({ deviceScaleFactor: 1 })
+  responsive.on('pageerror', (e) => errors.push(String(e)))
+  responsive.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+  const cases = [
+    ['islm', '?G=150'], ['adas', '?model=adas&M=1200'],
+    ['ismppc', '?model=ismppc&nu=2&nuMode=1&nuN=3'], ['nk', '?model=nk&u=1'],
+    ['adas-rate', '?model=adas&regime=rate&G=130'], ['ismppc-unstable', '?model=ismppc&thPi=-1&dG=2'],
+    ['nk-indeterminate', '?model=nk&phiPi=0.8&phiX=0'], ['nk-boundary', '?model=nk&phiPi=1&phiX=0'],
+  ]
+  for (const width of [1440, 1280, 1024, 390]) {
+    await responsive.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
+    for (const [id, q] of cases) {
+      await responsive.goto(URL_ + q)
+      await responsive.getByRole('heading', { name: '균형 그래프' }).waitFor()
+      await responsive.evaluate(() => document.fonts.ready)
+      const issues = await responsive.evaluate(() => {
+        const issues = []
+        if (document.documentElement.scrollWidth > innerWidth) issues.push('horizontal page scroll')
+        const chart = document.querySelector('.chart')
+        const matrix = chart.getScreenCTM()
+        if (Math.abs(matrix.a - matrix.d) > 0.001) issues.push('distorted graph')
+        const tabs = [...document.querySelectorAll('.tab')].map((el) => el.getBoundingClientRect())
+        if (tabs.some((r) => Math.abs(r.y - tabs[0].y) > 1)) issues.push('tabs wrap')
+        if (document.querySelector('.soon')) issues.push('unimplemented badge')
+        const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+        const tags = [...chart.querySelectorAll('.value-tag rect')].map((el) => el.getBBox())
+        for (const tick of chart.querySelectorAll('.axis text:not(.axis-title)')) {
+          if (tags.some((tag) => overlaps(tag, tick.getBBox()))) issues.push('axis tick overlaps value tag')
+        }
+        const ticks = [...chart.querySelectorAll('.axis text:not(.axis-title)')].map((el) => el.getBBox())
+        if (ticks.some((a, i) => ticks.slice(i + 1).some((b) => overlaps(a, b)))) issues.push('axis tick labels overlap')
+        for (const label of chart.querySelectorAll('.curve-label')) {
+          const b = label.getBBox()
+          if (b.x < 74 || b.y < 14 || b.x + b.width > 496 || b.y + b.height > 336) issues.push('curve label outside plot')
+        }
+        if (chart.querySelector('[d*="NaN"], [cx="NaN"], [cy="NaN"]')) issues.push('NaN SVG coordinates')
+        if (document.querySelector('.path-ref text')) issues.push('reference label inside plot')
+        if (innerWidth > 760) {
+          const controls = document.querySelector('.controls').getBoundingClientRect()
+          if (controls.height > innerHeight - 27) issues.push('controls taller than viewport')
+        }
+        return issues
+      })
+      if (issues.length) throw new Error(`${id} at ${width}px: ${issues.join(', ')}`)
+      await responsive.screenshot({ path: path.join(root, `test-results/${id}-${width}.png`), fullPage: true })
+    }
+    console.log(`all models at ${width}px: no overflow, labels contained, graph ratio preserved`)
   }
   if (errors.length) throw new Error(`page errors: ${errors.join('; ')}`)
   console.log('SMOKE OK')
