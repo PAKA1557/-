@@ -2,8 +2,10 @@
 // in Chromium, move the G slider and check that the displayed Y changes; then
 // open the AD-AS tab, move M and check the short-/long-run numbers; then
 // open the IS-MP-PC tab, apply a supply shock and make the Taylor rule
-// violate the Taylor principle.
-// Writes docs/screenshot-islm.png, docs/screenshot-adas.png and docs/screenshot-ismppc.png.
+// violate the Taylor principle; then open the 뉴케인지언 tab, apply a
+// cost-push shock and make the rule indeterminate (φπ < 1).
+// Writes docs/screenshot-islm.png, docs/screenshot-adas.png,
+// docs/screenshot-ismppc.png and docs/screenshot-nk.png.
 // Run `npm run build` first.
 //
 // Uses an installed `playwright` package (local or global); it does not
@@ -204,10 +206,61 @@ try {
   await page.screenshot({ path: pcOut, fullPage: true })
   console.log(`screenshot: ${path.relative(root, pcOut)}`)
 
+  // ---- New Keynesian ----
+  await page.getByRole('tab', { name: '뉴케인지언' }).click()
+  await page.waitForFunction(() => location.search === '?model=nk')
+  const nkBefore = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`NK before: ${JSON.stringify(nkBefore)}`)
+  if (nkBefore.Y1 !== '100.00' || nkBefore.pi1 !== '2.00%' || nkBefore.i1 !== '4.00%' || nkBefore.r1 !== '2.00%') {
+    throw new Error(`unexpected NK steady state ${JSON.stringify(nkBefore)}`)
+  }
+  if (!(await page.getByTestId('locked-Mnk').isVisible())) throw new Error('NK money supply is not shown as a locked outcome')
+  const uSlider = page.locator('input[type=range][name=uShock]')
+  await uSlider.focus()
+  for (let n = 0; n < 4; n++) await page.keyboard.press('ArrowRight')
+  const u = await read('input-uShock')
+  const nkAfter = { Y1: await read('out-Y1'), pi1: await read('out-pi1'), i1: await read('out-i1'), r1: await read('out-r1') }
+  console.log(`NK after u ${u}: ${JSON.stringify(nkAfter)}`)
+  if (u !== '1.00%p') throw new Error(`expected u 1.00%p, got ${u}`)
+  if (!(parseFloat(nkAfter.pi1) > 2 && parseFloat(nkAfter.Y1) < 100)) throw new Error(`NK cost-push shock is not stagflationary: ${JSON.stringify(nkAfter)}`)
+  if (!page.url().includes('model=nk') || !page.url().includes('uShock=1')) throw new Error(`URL not updated: ${page.url()}`)
+  const nkText = await page.getByTestId('explanation').textContent()
+  if (!nkText?.includes('스태그플레이션')) throw new Error('NK explanation does not mention stagflation')
+  const nkDots = await page.locator('[data-testid=trajectory] circle').count()
+  if (nkDots !== 41) throw new Error(`expected 41 NK path dots, got ${nkDots}`)
+  const det = await read('stability-status')
+  console.log(`determinacy: ${await read('stability-value')} (${det}), dots ${nkDots}`)
+  if (det !== '결정') throw new Error(`expected a determinate rule at defaults, got ${det}`)
+  // the selected period's NKPC moves with expected inflation and the shock
+  const nkpc1 = await page.getByTestId('curve-NKPC').getAttribute('d')
+  await scrub.fill('3')
+  const nkpc3 = await page.getByTestId('curve-NKPC').getAttribute('d')
+  if (nkpc1 === nkpc3) throw new Error('NKPC did not follow the selected period')
+  await scrub.fill('1')
+
+  // φπ < 1: indeterminacy warning, MSV path still drawn, no crash
+  await page.locator('input[type=range][name=phiPi]').fill('0.8')
+  const phiPi = await read('input-phiPi')
+  const indet = await read('stability-status')
+  const nkWarn = await page.locator('.warnings').textContent()
+  console.log(`φπ ${phiPi}: determinacy ${await read('stability-value')} (${indet})`)
+  if (phiPi !== '0.8' || indet !== '비결정' || !nkWarn?.includes('비결정') || !nkWarn.includes('테일러 원칙')) {
+    throw new Error(`indeterminacy warning not shown (φπ ${phiPi}, ${indet})`)
+  }
+  if (errors.length) throw new Error(`page errors: ${errors.join('; ')}`)
+
+  // screenshot: a persistent cost-push shock with the adjustment path
+  await page.goto(`${URL_}?model=nk&uShock=2&rhoU=0.7`)
+  await page.locator('[data-testid=trajectory]').waitFor()
+  await page.mouse.move(0, 0)
+  const nkOut = path.join(root, 'docs/screenshot-nk.png')
+  await page.screenshot({ path: nkOut, fullPage: true })
+  console.log(`screenshot: ${path.relative(root, nkOut)}`)
+
   // Phone width: panels must stack without horizontal scroll.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
   phone.on('pageerror', (e) => errors.push(String(e)))
-  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2']) {
+  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2', '?model=nk&uShock=2&rhoU=0.7', '?model=nk&phiPi=0.8&dRn=1']) {
     await phone.goto(URL_ + q)
     const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     console.log(`phone horizontal overflow ${q || '(IS-LM)'}: ${overflow}px`)

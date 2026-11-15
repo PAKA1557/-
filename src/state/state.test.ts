@@ -87,11 +87,19 @@ describe('reducer', () => {
     expect(reducer(s, { type: 'reset' })).toEqual(initialState())
   })
 
-  it('ignores unknown variables and unimplemented models', () => {
+  it('ignores unknown variables and switching to the current model', () => {
     const s = initialState()
     expect(reducer(s, { type: 'set', key: 'nope', value: 1 })).toBe(s)
-    expect(reducer(s, { type: 'model', model: 'nk' })).toBe(s)
     expect(reducer(s, { type: 'model', model: 'islm' })).toBe(s)
+  })
+
+  it('switching to the New Keynesian tab starts from its defaults and resumes on return', () => {
+    const islm = reducer(initialState(), { type: 'set', key: 'G', value: 150 })
+    const nk = reducer(islm, { type: 'model', model: 'nk' })
+    expect(nk).toEqual(initialState('nk'))
+    const shocked = reducer(nk, { type: 'set', key: 'uShock', value: 1 })
+    expect(reducer(shocked, { type: 'model', model: 'islm', remembered: islm })).toEqual(islm)
+    expect(reducer(islm, { type: 'model', model: 'nk', remembered: shocked }).values.uShock).toBe(1)
   })
 
   it('switching tabs keeps shared values and the regime; model-only variables take defaults', () => {

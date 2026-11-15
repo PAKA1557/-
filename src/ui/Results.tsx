@@ -11,7 +11,7 @@ function Stability({ s }: { s: StabilityReadout }) {
         <span>{s.label}</span>
         <strong data-testid="stability-value">{s.value}</strong>
         <span className="stability-badge" data-testid="stability-status">
-          {STATUS_LABEL[s.status]}
+          {s.statusLabel ?? STATUS_LABEL[s.status]}
         </span>
       </div>
       {s.latex && <Tex latex={s.latex} display />}
