@@ -91,6 +91,8 @@ export function carrySnapshot(snap: Snapshot, to: ModelDefinition): Snapshot {
 
 /** Variable keys two models have in common (carried over on a tab switch). */
 export function sharedKeys(a: ModelDefinition, b: ModelDefinition): string[] {
+  // Shared names do not imply shared scenarios: NK uses forward expectations.
+  if (a.id !== b.id && (a.id === 'nk' || b.id === 'nk')) return []
   const keys = new Set(b.variables.map((v) => v.key))
   return a.variables.filter((v) => keys.has(v.key)).map((v) => v.key)
 }
@@ -98,7 +100,9 @@ export function sharedKeys(a: ModelDefinition, b: ModelDefinition): string[] {
 function switchModel(state: ScenarioState, id: ModelId, remembered?: ScenarioState): ScenarioState {
   const to = getModel(id)
   if (!to || id === state.model) return state
-  if (remembered && remembered.model === id && sharedKeys(requireModel(state.model), to).length === 0) return remembered
+  if (sharedKeys(requireModel(state.model), to).length === 0) {
+    return remembered?.model === id ? remembered : initialState(id)
+  }
   return { model: to.id, ...carrySnapshot(state, to), baseline: carrySnapshot(state.baseline, to) }
 }
 

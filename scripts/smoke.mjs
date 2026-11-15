@@ -3,7 +3,8 @@
 // open the AD-AS tab, move M and check the short-/long-run numbers; then
 // open the IS-MP-PC tab, apply a supply shock and make the Taylor rule
 // violate the Taylor principle.
-// Writes docs/screenshot-islm.png, docs/screenshot-adas.png and docs/screenshot-ismppc.png.
+// Includes NK rational-expectations, determinacy and tab-state checks.
+// Writes docs/screenshot-{islm,adas,ismppc,nk}.png.
 // Run `npm run build` first.
 //
 // Uses an installed `playwright` package (local or global); it does not
@@ -204,10 +205,38 @@ try {
   await page.screenshot({ path: pcOut, fullPage: true })
   console.log(`screenshot: ${path.relative(root, pcOut)}`)
 
+  // ---- New Keynesian ----
+  await page.getByRole('tab', { name: '뉴케인지언' }).click()
+  await page.waitForFunction(() => location.search === '?model=nk')
+  for (const [key, expected] of Object.entries({ Y1: '100.00', pi1: '2.00%', i1: '4.00%', r1: '2.00%' })) {
+    if (await read(`out-${key}`) !== expected) throw new Error(`unexpected NK default ${key}`)
+  }
+  if (await read('stability-value') !== '0.170') throw new Error('unexpected NK determinacy condition')
+  await page.locator('input[type=range][name=u]').fill('1')
+  if (!(parseFloat(await read('out-Y1')) < 100 && parseFloat(await read('out-pi1')) > 2)) throw new Error('NK cost shock signs incorrect')
+  const nkpc1 = await page.getByTestId('curve-NKPC').getAttribute('d')
+  await scrub.fill('3')
+  if (await page.getByTestId('curve-NKPC').getAttribute('d') === nkpc1) throw new Error('NKPC did not follow period')
+  await page.locator('input[type=range][name=rhoU]').fill('0')
+  await scrub.fill('2')
+  if (await read('path-pi') !== '2기: 2.00%') throw new Error('NK did not return in period 2 at rho = 0')
+  await page.locator('input[type=range][name=phiPi]').fill('0.8')
+  await page.locator('input[type=range][name=phiX]').fill('0')
+  if (await read('stability-status') !== '불안정' || !(await page.locator('.warnings').textContent()).includes('유일한 균형이 없음')) throw new Error('NK indeterminacy warning absent')
+  if (await read('out-Y1') !== '—') throw new Error('NK reports an indeterminate equilibrium')
+  await page.getByRole('tab', { name: 'IS-MP-PC' }).click()
+  if (!page.url().includes('nu=2')) throw new Error('NK overwrote IS-MP-PC state')
+  await page.getByRole('tab', { name: '뉴케인지언' }).click()
+  if (!page.url().includes('phiPi=0.8')) throw new Error('NK state not resumed')
+  await page.goto(`${URL_}?model=nk&u=1&rhoU=0.5`)
+  await page.locator('[data-testid=trajectory]').waitFor()
+  await page.screenshot({ path: path.join(root, 'docs/screenshot-nk.png'), fullPage: true })
+  console.log('NK defaults, shocks, period curves, determinacy and tab state OK')
+
   // Phone width: panels must stack without horizontal scroll.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
   phone.on('pageerror', (e) => errors.push(String(e)))
-  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2']) {
+  for (const q of ['', '?model=adas&M=1200', '?model=adas&regime=rate&G=130', '?model=ismppc&nu=2&nuMode=1&nuN=3', '?model=ismppc&thPi=-1&dG=2', '?model=nk&u=1', '?model=nk&phiPi=0.8&phiX=0']) {
     await phone.goto(URL_ + q)
     const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     console.log(`phone horizontal overflow ${q || '(IS-LM)'}: ${overflow}px`)
