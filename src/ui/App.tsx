@@ -103,15 +103,18 @@ export default function App() {
         </div>
       )}
       <main className="layout">
-        <ControlPanel
-          key={model.id}
-          model={model}
-          regime={state.regime}
-          values={state.values}
-          solution={view.current}
-          onSet={(key, value) => dispatch({ type: 'set', key, value })}
-          onRegime={(regime) => dispatch({ type: 'regime', regime })}
-        />
+        {/* The slot is the grid item; the panel sticks inside it, so it stops at the end of the row. */}
+        <div className="controls-slot">
+          <ControlPanel
+            key={model.id}
+            model={model}
+            regime={state.regime}
+            values={state.values}
+            solution={view.current}
+            onSet={(key, value) => dispatch({ type: 'set', key, value })}
+            onRegime={(regime) => dispatch({ type: 'regime', regime })}
+          />
+        </div>
         <div className="center">
           <EquilibriumGraph
             title={model.name}
